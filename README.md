@@ -135,6 +135,8 @@ You pay for these outputs, so they're yours to keep and contribute. Enable them 
 
 ## Licensing note
 
+Copyright 2026 DEM contributors. Licensed under the [Apache License, Version 2.0](LICENSE).
+
 The default license is **Apache-2.0**, as requested. Apache-2.0 is a *software* license; it is applied here to data because it is permissive and carries an express patent grant. It is applied **only to records the contributor had the right to license** — third-party content is excluded by the redaction/review pipeline. Contributors who prefer a data-specific license can tag records `ODC-By-1.0` or `CC-BY-4.0`. Downstream users must do their own legal review. **This is not legal advice.**
 
 ---
