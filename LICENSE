@@ -1,0 +1,27 @@
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+Copyright 2026 DEM contributors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+NOTE ON APPLYING A SOFTWARE LICENSE TO DATA
+-------------------------------------------
+Apache-2.0 is a software license. DEM applies it to the dataset as the
+default license because it is permissive, includes an express patent grant,
+and is widely understood by downstream model builders. It is applied only to
+records the contributor has the right to license. Third-party content embedded
+in outputs is excluded by the redaction/review pipeline. Contributors who
+prefer a data-specific license may tag their records ODC-By-1.0 or CC-BY-4.0.
+See README.md and the generated dataset card for the full licensing note.
