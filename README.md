@@ -18,14 +18,14 @@ Capture → encrypted local vault → redaction → review → Hugging Face
 On macOS or Linux with Python 3.11+ and venv support, install the released CLI for your user account.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/raymondchiwaz/distill-every-model/v0.3.1/scripts/install.sh | sh
+curl -fsSL https://github.com/raymondchiwaz/distill-every-model/releases/download/v0.3.1/install.sh | sh
 ~/.local/bin/dem review --open
 ```
 
 Install with npm if you have Node.js, npm, and Python 3.11 or newer with `venv` and `pip` support.
 
 ```bash
-npm install -g @distilleverymodel/distill-every-model
+npm install -g https://github.com/raymondchiwaz/distill-every-model/releases/download/v0.3.1/distilleverymodel-distill-every-model-0.3.1.tgz
 dem review --open
 ```
 

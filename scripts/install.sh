@@ -7,7 +7,7 @@ install_dem() {
     runtime="${XDG_DATA_HOME:-$HOME/.local/share}/distill-every-model/cli-$version"
     bin_dir="${DEM_BIN_DIR:-$HOME/.local/bin}"
     python="${DEM_PYTHON:-python3}"
-    package="https://registry.npmjs.org/@distilleverymodel/distill-every-model/-/distill-every-model-$version.tgz"
+    package="https://github.com/raymondchiwaz/distill-every-model/releases/download/v$version/distilleverymodel-distill-every-model-$version.tgz"
     digest="ce476e9550990be028cf003f9c5633202649bd995987f3413b207db4cf4b23ac4be727f16f4f1f895c00861a19e13307c6fec172809aabdbd4f80317a4ed3c7b"
 
     "$python" -c 'import venv, ensurepip, sys; sys.exit(sys.version_info < (3, 11))' || {
