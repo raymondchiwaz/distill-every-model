@@ -4,7 +4,7 @@ Local-first, consent-based capture of LLM outputs into an open training-data
 commons. Nothing leaves the device without explicit, per-item human approval.
 """
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 HARD_NO = (
     "no silent capture · no silent auto-upload · no capturing others' devices or "

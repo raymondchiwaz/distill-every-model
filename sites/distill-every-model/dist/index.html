@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#17233c">
+  <meta name="description" content="Distill Every Model helps people turn AI conversations they choose to share into an open training-data commons.">
+  <title>Distill Every Model — An open intelligence commons</title>
+  <link rel="icon" type="image/png" href="assets/dem-mark.png">
+  <link rel="preload" href="assets/instrument-serif.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body id="top">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="frame header-inner">
+      <a class="brand" href="#top" aria-label="Distill Every Model home">
+        <img src="assets/dem-mark.png" width="28" height="30" alt="">
+        <span>Distill Every Model</span>
+      </a>
+      <nav class="main-nav" aria-label="Main navigation">
+        <a href="#mission">Mission</a>
+        <a href="#sources">Supported tools</a>
+        <a href="#setup">Setup demos</a>
+        <a href="#contribute">Contribute</a>
+      </nav>
+      <a class="header-install" href="#install">Install DEM</a>
+    </div>
+  </header>
+  <main id="main">
+    <section class="hero-band" aria-labelledby="hero-title">
+      <div class="hero frame">
+      <div class="hero-copy">
+        <h1 id="hero-title">Keep intelligence<br><em>open to everyone.</em></h1>
+        <p>A handful of labs decide who can build on the knowledge their models learned from the web. We’re building a training-data commons that people can contribute to, inspect, and use for themselves.</p>
+        <div class="actions">
+          <a class="button button-primary" href="#contribute">Join the effort</a>
+          <a class="button button-outline" href="#mission">Read the mission</a>
+        </div>
+      </div>
+      <figure class="hero-art">
+        <img src="assets/commons-archive.webp" width="1056" height="1320" fetchpriority="high" alt="Cream archival cards with dark redaction bars stacked on a cobalt blue surface">
+      </figure>
+      </div>
+    </section>
+
+    <section class="mission frame" id="mission" aria-labelledby="mission-title">
+      <div class="section-intro">
+        <h2 id="mission-title">Who gets to shape AI?</h2>
+        <p>People spent decades writing, teaching, and making things on the open web. Publishing that work rarely gave its creators a meaningful choice about whether it would train a commercial model.</p>
+      </div>
+      <div class="mission-points">
+        <article>
+          <h3>A one-way exchange</h3>
+          <p>Major labs train on publicly available work. Some then restrict the use of their models’ outputs to train competitors, including through distillation, where a new model learns from another model’s answers.</p>
+          <div class="sources-links"><a href="https://openai.com/policies/how-chatgpt-and-our-foundation-models-are-developed/">How OpenAI trains its models</a><a href="https://openai.com/policies/services-agreement/">OpenAI’s restrictions on output use</a></div>
+        </article>
+        <article>
+          <h3>Concentrated power affects everyone</h3>
+          <p>If AI reaches superhuman capability, decisions about access, price, and acceptable uses could rest with a small group of people. We believe everyone has a stake in who makes those decisions.</p>
+        </article>
+        <article>
+          <h3>A commons built with permission</h3>
+          <p>DEM gives people a practical way to participate. Choose a conversation you have the right to share, review it on your machine, and contribute the approved examples to an open dataset others can study and build on.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="catalog" id="sources" aria-labelledby="sources-title">
+      <div class="frame">
+        <div class="catalog-heading">
+          <h2 id="sources-title">Supported tools</h2>
+          <p>Import saved conversations from these 23 coding tools. Each import starts on your machine and requires your consent.</p>
+        </div>
+        <ul class="harness-list">
+          <li><img src="assets/harnesses/aider.png" width="32" height="32" loading="lazy" alt="">Aider</li>
+          <li><img src="assets/harnesses/amp.png" width="32" height="32" loading="lazy" alt="">Amp</li>
+          <li><img src="assets/harnesses/claude-code.png" width="32" height="32" loading="lazy" alt="">Claude Code</li>
+          <li><img src="assets/harnesses/cline.png" width="32" height="32" loading="lazy" alt="">Cline</li>
+          <li><img src="assets/harnesses/codex.png" width="32" height="32" loading="lazy" alt="">Codex</li>
+          <li><img src="assets/harnesses/continue.png" width="32" height="32" loading="lazy" alt="">Continue</li>
+          <li><img src="assets/harnesses/crush.png" width="32" height="32" loading="lazy" alt="">Crush</li>
+          <li><img src="assets/harnesses/cursor.png" width="32" height="32" loading="lazy" alt="">Cursor</li>
+          <li><img src="assets/harnesses/deepseek.png" width="32" height="32" loading="lazy" alt="">DeepSeek Harness</li>
+          <li><img src="assets/harnesses/droid.png" width="32" height="32" loading="lazy" alt="">Factory Droid</li>
+          <li><img src="assets/harnesses/gemini-cli.png" width="32" height="32" loading="lazy" alt="">Gemini CLI</li>
+          <li><img src="assets/harnesses/copilot.png" width="32" height="32" loading="lazy" alt="">GitHub Copilot CLI</li>
+          <li><img src="assets/harnesses/antigravity.png" width="32" height="32" loading="lazy" alt="">Google Antigravity</li>
+          <li><img src="assets/harnesses/goose.png" width="32" height="32" loading="lazy" alt="">Goose</li>
+          <li><img src="assets/harnesses/kilo-code.png" width="32" height="32" loading="lazy" alt="">Kilo Code</li>
+          <li><img src="assets/harnesses/kimi-cli.png" width="32" height="32" loading="lazy" alt="">Kimi Code CLI</li>
+          <li><img src="assets/harnesses/kiro.png" width="32" height="32" loading="lazy" alt="">Kiro</li>
+          <li><img src="assets/harnesses/mistral-vibe.png" width="32" height="32" loading="lazy" alt="">Mistral Vibe</li>
+          <li><img src="assets/harnesses/opencode.png" width="32" height="32" loading="lazy" alt="">OpenCode</li>
+          <li><img src="assets/harnesses/openhands.png" width="32" height="32" loading="lazy" alt="">OpenHands</li>
+          <li><img src="assets/harnesses/pi.png" width="32" height="32" loading="lazy" alt="">Pi</li>
+          <li><img src="assets/harnesses/qwen-code.png" width="32" height="32" loading="lazy" alt="">Qwen Code</li>
+          <li><img src="assets/harnesses/roo-code.png" width="32" height="32" loading="lazy" alt="">Roo Code</li>
+        </ul>
+        <div class="live-source"><img src="assets/ollama.png" alt="" width="30" height="36" loading="lazy"><p>For live model sessions, <a href="#ollama-demo" data-open-ollama>capture with Ollama</a>.</p></div>
+      </div>
+    </section>
+
+    <section class="setup" id="setup" aria-labelledby="setup-title">
+      <div class="frame">
+        <div class="setup-heading">
+          <h2 id="setup-title">Set up DEM.</h2>
+          <p>Follow a walkthrough to import saved chats or capture an Ollama session.</p>
+        </div>
+        <section class="install-panel" id="install" aria-labelledby="install-title">
+          <div class="install-intro">
+            <h3 id="install-title">Install the CLI</h3>
+            <p>Both installers need Python 3.11 or newer with <code>venv</code> and <code>pip</code>. Choose the method that fits your machine.</p>
+          </div>
+          <div class="install-options">
+            <article>
+              <h4>curl <small>macOS &amp; Linux</small></h4>
+              <div class="code-block">
+                <div class="code-bar"><span>Shell</span><button type="button" class="copy" hidden>Copy</button></div>
+                <pre><code>curl -fsSL https://raw.githubusercontent.com/raymondchiwaz/distill-every-model/v0.3.1/scripts/install.sh | sh</code></pre>
+              </div>
+              <p>Launch with <code>~/.local/bin/dem review --open</code>.</p>
+              <a class="text-link" href="https://raw.githubusercontent.com/raymondchiwaz/distill-every-model/v0.3.1/scripts/install.sh">Inspect the installer</a>
+            </article>
+            <article>
+              <h4>npm <small>Windows, macOS &amp; Linux</small></h4>
+              <div class="code-block">
+                <div class="code-bar"><span>Terminal</span><button type="button" class="copy" hidden>Copy</button></div>
+                <pre><code>npm install -g @distilleverymodel/distill-every-model</code></pre>
+              </div>
+              <p>Launch with <code>dem review --open</code>. The first run installs Python dependencies.</p>
+              <a class="text-link" href="https://www.npmjs.com/package/@distilleverymodel/distill-every-model">View the npm package</a>
+            </article>
+          </div>
+        </section>
+        <div class="walkthrough" data-walkthrough>
+          <div class="walkthrough-tabs" aria-label="Setup demos" data-tabs hidden>
+            <button type="button" id="history-tab" data-select="history">Import saved chats</button>
+            <button type="button" id="ollama-tab" data-select="ollama">Capture live with Ollama</button>
+          </div>
+
+          <section class="track" id="history-demo" data-track="history" aria-labelledby="history-heading">
+            <h3 class="track-label" id="history-heading">Import saved chats</h3>
+            <div class="step-layout">
+              <ol class="step-list">
+                <li><button type="button" data-step="0" aria-controls="history-install">Install DEM</button></li>
+                <li><button type="button" data-step="1" aria-controls="history-open">Open local review</button></li>
+                <li><button type="button" data-step="2" aria-controls="history-import">Import a conversation</button></li>
+              </ol>
+              <div class="step-content">
+                <article class="step" id="history-install">
+                  <h4>Install DEM</h4>
+                  <p>Use the <a class="text-link" href="#install">curl or npm installer</a> or install from source.</p>
+                  <details class="command-details">
+                    <summary>Install from GitHub</summary>
+                    <p>You’ll need Git and Python 3.11 or newer with <code>venv</code> and <code>pip</code> support.</p>
+                    <div class="code-block">
+                      <div class="code-bar"><span>Terminal · macOS / Linux</span><button type="button" class="copy" hidden>Copy</button></div>
+                      <pre><code>git clone https://github.com/raymondchiwaz/distill-every-model.git
+cd distill-every-model
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .</code></pre>
+                    </div>
+                    <p>Activate the virtual environment in each terminal where you run DEM on macOS or Linux.</p>
+                    <div class="code-block">
+                      <div class="code-bar"><span>PowerShell · Windows</span><button type="button" class="copy" hidden>Copy</button></div>
+                      <pre><code>git clone https://github.com/raymondchiwaz/distill-every-model.git
+cd distill-every-model
+py -3 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e .</code></pre>
+                    </div>
+                    <p>On Windows, use <code>.\.venv\Scripts\dem.exe</code> in place of <code>dem</code> in the next steps.</p>
+                  </details>
+                </article>
+                <article class="step" id="history-open">
+                  <h4>Open local review</h4>
+                  <p>If the review workspace is closed, run this command to open it in your browser. You can also use the local URL printed in your terminal.</p>
+                  <div class="code-block">
+                    <div class="code-bar"><span>Terminal</span><button type="button" class="copy" hidden>Copy</button></div>
+                    <pre><code>dem review --open</code></pre>
+                  </div>
+                </article>
+                <article class="step" id="history-import">
+                  <h4>Import a conversation</h4>
+                  <p>In the review workspace, open the chat importer. Choose a source such as Codex, Claude Code, or OpenCode. Use a saved session or give DEM the path to a local transcript.</p>
+                  <p>Read the consent prompt on your first import. Then pick one conversation in <strong>Chat history</strong> to inspect the redacted text.</p>
+                  <a class="text-link" href="https://github.com/raymondchiwaz/distill-every-model#import-past-coding-agent-chats">See supported sources</a>
+                </article>
+              </div>
+            </div>
+          </section>
+
+          <section class="track" id="ollama-demo" data-track="ollama" aria-labelledby="ollama-heading">
+            <h3 class="track-label" id="ollama-heading">Capture live with Ollama</h3>
+            <div class="step-layout">
+              <ol class="step-list">
+                <li><button type="button" data-step="0" aria-controls="ollama-start">Start the capture proxy</button></li>
+                <li><button type="button" data-step="1" aria-controls="ollama-chat">Run a sample prompt</button></li>
+                <li><button type="button" data-step="2" aria-controls="ollama-review">Review the capture</button></li>
+              </ol>
+              <div class="step-content">
+                <article class="step" id="ollama-start">
+                  <h4>Start the capture proxy</h4>
+                  <p>Install DEM and have <a class="text-link" href="https://ollama.com/">Ollama</a> running locally. Download the sample model, complete DEM’s consent wizard, and opt in to keeping prompts for this example. Leave this terminal open.</p>
+                  <div class="code-block">
+                    <div class="code-bar"><span>Terminal 1</span><button type="button" class="copy" hidden>Copy</button></div>
+                    <pre><code>ollama pull llama3.1
+dem onboard
+dem config capture capture_prompts true
+dem daemon</code></pre>
+                  </div>
+                </article>
+                <article class="step" id="ollama-chat">
+                  <h4>Run a sample prompt</h4>
+                  <p>In a second terminal, point the Ollama client at DEM’s local proxy and run a prompt.</p>
+                  <div class="code-block">
+                    <div class="code-bar"><span>Terminal 2 · macOS / Linux</span><button type="button" class="copy" hidden>Copy</button></div>
+                    <pre><code>export OLLAMA_HOST=http://127.0.0.1:11435
+ollama run llama3.1 "Why is the sky blue?"</code></pre>
+                  </div>
+                  <details class="command-details">
+                    <summary>Windows PowerShell commands</summary>
+                    <div class="code-block">
+                      <div class="code-bar"><span>PowerShell</span><button type="button" class="copy" hidden>Copy</button></div>
+                      <pre><code>$env:OLLAMA_HOST = "http://127.0.0.1:11435"
+ollama run llama3.1 "Why is the sky blue?"</code></pre>
+                    </div>
+                  </details>
+                </article>
+                <article class="step" id="ollama-review">
+                  <h4>Review the capture</h4>
+                  <p>In the second terminal, open the review workspace and inspect the prompt and answer in your sample exchange.</p>
+                  <div class="code-block">
+                    <div class="code-bar"><span>Terminal 2</span><button type="button" class="copy" hidden>Copy</button></div>
+                    <pre><code>dem review --open</code></pre>
+                  </div>
+                </article>
+              </div>
+            </div>
+          </section>
+          <div class="step-controls" hidden>
+            <button type="button" data-previous>Back</button>
+            <span data-step-status aria-live="polite"></span>
+            <button type="button" data-next>Next step</button>
+            <a class="button" data-done href="#contribute" hidden>See how to contribute</a>
+          </div>
+        </div>
+        <div id="copy-status" class="visually-hidden" role="status"></div>
+      </div>
+    </section>
+
+    <section class="contribute frame" id="contribute" aria-labelledby="contribute-title">
+      <div class="contribute-heading">
+        <h2 id="contribute-title">Make one useful<br><em>chat count.</em></h2>
+        <p>Start with an exchange you have permission to share. Look for a clear problem and an answer that someone else could learn from.</p>
+      </div>
+      <div class="contribute-grid">
+        <div class="contribute-guide">
+          <h3>Share a reviewed chat</h3>
+          <ol>
+            <li><strong>Review and approve.</strong> Open the conversation locally, read the redacted prompts and answers, then approve the chat you want to share.</li>
+            <li><strong>Preview the export.</strong> Open the Hugging Face export and enter the community’s <code>owner/dataset</code>. Check the exact records in the batch.</li>
+            <li><strong>Send to community.</strong> Sign in with a Hugging Face account that can open pull requests. The selected batch is public as soon as the pull request opens.</li>
+          </ol>
+          <a class="text-link" href="https://github.com/raymondchiwaz/distill-every-model#contribute-to-the-hugging-face-community-dataset">Read the contribution guide</a>
+        </div>
+        <div class="redaction-demo" data-redaction>
+          <div class="demo-title">
+            <h3>Try a review</h3>
+            <span>Fictional example</span>
+          </div>
+          <div class="redaction-switch" role="group" aria-label="Sample chat view" hidden>
+            <button type="button" data-view="original" aria-pressed="true">Local original</button>
+            <button type="button" data-view="redacted" aria-pressed="false">Redacted preview</button>
+          </div>
+          <div class="sample-chat" aria-live="polite">
+            <div data-sample="original">
+              <span class="fallback-label">Local original</span>
+              <p class="sample-message"><b>Prompt</b>Help me write a bug report. The export fails after I filter archived items. Include my email, <mark>sam@example.com</mark>, for follow-up.</p>
+              <p class="sample-message"><b>Answer</b>Export fails after filtering archived items. Steps to reproduce: open the archive, apply a filter, then select Export. Contact <mark>sam@example.com</mark>.</p>
+            </div>
+            <div data-sample="redacted">
+              <span class="fallback-label">Redacted preview</span>
+              <p class="sample-message"><b>Prompt</b>Help me write a bug report. The export fails after I filter archived items. Include my email, <code class="redacted-token">[EMAIL_1]</code>, for follow-up.</p>
+              <p class="sample-message"><b>Answer</b>Export fails after filtering archived items. Steps to reproduce: open the archive, apply a filter, then select Export. Contact <code class="redacted-token">[EMAIL_1]</code>.</p>
+            </div>
+          </div>
+          <p class="demo-note">Check the preview for details that should stay private before you approve a chat.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="help" aria-labelledby="help-title">
+      <div class="frame help-inner">
+        <div>
+          <h2 id="help-title">Help build DEM.</h2>
+          <p>Report a bug, suggest a chat source, or improve the importers and review tools.</p>
+        </div>
+        <div class="actions">
+          <a class="button button-primary" href="https://github.com/raymondchiwaz/distill-every-model/issues">Explore GitHub issues</a>
+          <a class="button button-outline" href="https://github.com/raymondchiwaz/distill-every-model">Browse the source</a>
+        </div>
+      </div>
+    </section>
+  </main>
+  <footer class="site-footer">
+    <div class="frame footer-inner">
+      <a class="brand" href="#top">
+        <img src="assets/dem-mark.png" width="28" height="30" alt="">
+        <span>Distill Every Model</span>
+      </a>
+      <a href="assets/harnesses/NOTICE.txt">Logo credits</a>
+      <a href="https://github.com/raymondchiwaz/distill-every-model/blob/main/LICENSE">Apache 2.0 project license</a>
+    </div>
+  </footer>
+</body>
+</html>

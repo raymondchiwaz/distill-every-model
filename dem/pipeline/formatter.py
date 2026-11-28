@@ -9,8 +9,10 @@ from ..vault import Vault
 from .evidence import collect_task_evidence
 
 
-def build_records(vault: Vault, config: Config, *, conversation_id: str | None = None) -> list[DatasetRecord]:
-    return records_from_captures(vault.approved_captures(conversation_id), vault, config)
+def build_records(vault: Vault, config: Config, *, conversation_id: str | None = None,
+                  conversation_ids: tuple[str, ...] | None = None) -> list[DatasetRecord]:
+    captures = vault.approved_captures(conversation_id, conversation_ids=conversation_ids)
+    return records_from_captures(captures, vault, config)
 
 
 def records_from_captures(captures: list[CaptureEvent], vault: Vault, config: Config) -> list[DatasetRecord]:

@@ -7,11 +7,12 @@ import zipfile
 from collections.abc import Collection
 
 from ..consent import CONSENT_VERSION, commercial_attested
-from ..history_sources import SOURCES, history_files
+from ..history_sources import SOURCES, history_files, is_child_history
 from ..models import ACTIVITY_PAYLOAD_FIELDS, ACTIVITY_RESULT_FIELDS, CaptureEvent, sha256_text, ulid
-from ..privacy import CODE_BLOCK_REMOVED, redact, redact_tool_payload
+from ..privacy import redact, redact_tool_payload
+from ..vault import merge_history_activity
 
-from .history_readers import Message, read_turns
+from .history_readers import Message, TurnActivity, _tool_event, read_turns
 
 CODEX_TOOL_NAMES = {"local_shell_call": "shell", "web_search_call": "web search",
                     "tool_search_call": "tool search", "image_generation_call": "image generation"}
@@ -29,45 +30,42 @@ def _text(content, kinds):
                      and part.get("type") in kinds and isinstance(part.get("text"), str)).strip()
 
 
-def _claude(row, details, calls):
+def _claude(row, *, child=False):
     msg = row.get("message")
-    if not isinstance(msg, dict) or row.get("isSidechain"):
+    if not isinstance(msg, dict) or (row.get("isSidechain") and not child):
         return None
     kind = row.get("type")
     content = msg.get("content")
+    blocks = [block for block in content if isinstance(block, dict)] if isinstance(content, list) else []
     if kind == "user":
-        if isinstance(content, list) and any(isinstance(b, dict) and b.get("type") == "tool_result"
-                                             for b in content):
-            for block in content:
-                if not isinstance(block, dict) or block.get("type") != "tool_result":
-                    continue
-                call_id = block.get("tool_use_id")
-                if isinstance(call_id, str) and call_id in calls:
-                    _record_tool_result(details[calls[call_id]], block, output_key="content")
-            return None
+        results = [_tool_event(block, result=True) for block in blocks if block.get("type") == "tool_result"]
+        if results:
+            return Message("activity", "", activity=[step for step, _ in results],
+                           tool_details={i: detail for i, (_, detail) in enumerate(results)})
         text = _text(content, {"text"})
         if row.get("isMeta") or row.get("isCompactSummary") or text.startswith(
             ("<local-command-", "<command-name>", "<system-reminder>")
         ):
-            text = ""
+            return None
         return Message("prompt", text)
     if kind == "assistant":
         model = msg.get("model")
         model = model if isinstance(model, str) else ""
-        blocks = [block for block in content if isinstance(block, dict)] if isinstance(content, list) else []
-        if msg.get("stop_reason") == "tool_use" or any(b.get("type") == "tool_use" for b in blocks):
+        call_types = ("tool_use", "server_tool_use", "mcp_tool_use")
+        if msg.get("stop_reason") == "tool_use" or any(
+            block.get("type") in call_types or str(block.get("type", "")).endswith("_tool_result") for block in blocks
+        ):
             activity = []
             tool_details = {}
             for block in blocks:
-                if block.get("type") == "tool_use":
-                    detail = {"call_id": block.get("id")}
-                    if block.get("input") is not None:
-                        detail["input"] = block["input"]
+                block_type = block.get("type")
+                if block_type in call_types or str(block_type).endswith("_tool_result"):
+                    step, detail = _tool_event(block, result=block_type not in call_types)
                     tool_details[len(activity)] = detail
-                    activity.append(("tool_call", block.get("name") or "tool"))
-                elif block.get("type") == "text" and isinstance(block.get("text"), str):
+                    activity.append(step)
+                elif block_type == "text" and isinstance(block.get("text"), str):
                     activity.append(("progress", block["text"]))
-            return Message("response", "", model, activity=activity, tool_details=tool_details)
+            return Message("activity", "", model, activity, tool_details)
         return Message("response", _text(content, {"text"}), model)
     return None
 
@@ -116,36 +114,67 @@ def _codex(row, legacy):
     return None
 
 
-def _codex_tool_activity(payload, activity, details, calls, model):
+CODEX_EVENT_TOOLS = {
+    "exec_command": "exec_command",
+    "mcp_tool_call": "",
+    "web_search": "web search",
+    "dynamic_tool_call": "",
+    "patch_apply": "apply_patch",
+}
+CODEX_ITEM_TOOLS = {
+    "CommandExecution": "exec_command", "McpToolCall": "", "WebSearch": "web search",
+    "DynamicToolCall": "", "FileChange": "apply_patch", "ImageView": "view_image",
+    "ImageGeneration": "image generation", "CollabAgentToolCall": "agent",
+}
+
+
+def _codex_tool_event(row, payload):
     kind = payload.get("type")
     if not isinstance(kind, str):
-        return
+        return None
     call_id = payload.get("call_id") or payload.get("id")
-    if kind in CODEX_TOOL_CALLS:
-        index = len(activity)
-        name = payload.get("name") or CODEX_TOOL_NAMES.get(kind, "tool")
-        activity.append(("tool_call", name))
-        detail = {"model": model} if model else {}
-        for key in ("arguments", "input", "action"):
-            if payload.get(key) is not None:
-                detail["input"] = payload[key]
-                break
-        if payload.get("result") is not None:
-            detail["output"] = payload["result"]
-        details[index] = detail
-        if isinstance(call_id, str):
-            calls[call_id] = index
-    elif kind in CODEX_TOOL_RESULTS and isinstance(call_id, str) and call_id in calls:
-        _record_tool_result(details[calls[call_id]], payload)
-
-
-def _record_tool_result(detail, result, *, output_key="output"):
-    if result.get(output_key) is not None:
-        detail["output"] = result[output_key]
-    if type(result.get("exit_code")) is int:
-        detail["exit_code"] = str(result["exit_code"])
-    if isinstance(result.get("is_error"), bool):
-        detail["is_error"] = str(result["is_error"]).lower()
+    if row.get("type") == "response_item":
+        if kind in CODEX_TOOL_CALLS:
+            return _tool_event({**payload, "name": payload.get("name") or CODEX_TOOL_NAMES.get(kind, "tool")})
+        if kind in CODEX_TOOL_RESULTS:
+            return _tool_event(payload, result=True)
+    if row.get("type") != "event_msg":
+        return None
+    if kind in ("item_started", "item_completed"):
+        item = payload.get("item")
+        if not isinstance(item, dict) or item.get("type") not in CODEX_ITEM_TOOLS:
+            return None
+        data = item
+        name = CODEX_ITEM_TOOLS[item["type"]]
+        complete = kind == "item_completed"
+        call_id = item.get("call_id") or item.get("id")
+    else:
+        event, _, phase = kind.rpartition("_")
+        if event not in CODEX_EVENT_TOOLS or phase not in ("begin", "end"):
+            return None
+        data = payload
+        name = CODEX_EVENT_TOOLS[event]
+        complete = phase == "end"
+    invocation = data.get("invocation")
+    invocation = invocation if isinstance(invocation, dict) else {}
+    name = data.get("tool") or invocation.get("tool") or name
+    fields = {**data, "name": name, "call_id": call_id}
+    if "status" not in fields and not complete:
+        fields["status"] = "running"
+    for key in ("command", "query", "changes", "path"):
+        if data.get(key):
+            fields.setdefault("input", {key: data[key]})
+            break
+    for key in ("aggregated_output", "results"):
+        if data.get(key) is not None:
+            fields.setdefault("output", data[key])
+            break
+    step, detail = _tool_event(fields, result=complete)
+    if complete and "input" in fields:
+        detail.setdefault("input", fields["input"])
+    if invocation.get("arguments") is not None:
+        detail.setdefault("input", invocation["arguments"])
+    return step, detail
 
 
 def _rows(stream):
@@ -157,7 +186,7 @@ def _rows(stream):
         yield line_no, row if isinstance(row, dict) else None
 
 
-def _turns(stream, source, filename, stats):
+def _turns(stream, source, filename, stats, *, child=False):
     # Older Codex rollouts contain only wire messages. Prefer user-facing
     # events whenever available so injected context cannot replace the prompt.
     legacy = False
@@ -171,75 +200,72 @@ def _turns(stream, source, filename, stats):
         stream.seek(0)
     session = filename
     prompt = answer = None
-    activity = []
-    tool_details = {}
-    calls = {}
+    turn = TurnActivity()
+    finished = []
+    call_turns = {}
     start = 0
     model = ""
     for line_no, row in _rows(stream):
+        msg = None
         if row is None:
             stats["malformed_lines"] += 1
-            prompt = answer = None
-            activity = []
-            tool_details, calls = {}, {}
-            continue
-        if source == "claude-code":
-            session = row.get("sessionId") or session
-            msg = _claude(row, tool_details, calls)
+            msg = Message("boundary", "")
+        elif source == "claude-code":
+            if child:
+                session = row.get("agentId") or filename
+            else:
+                session = row.get("sessionId") or session
+            msg = _claude(row, child=child)
         else:
             payload = row.get("payload")
             if isinstance(payload, dict):
                 if row.get("type") == "session_meta":
                     if isinstance(payload.get("source"), dict) and "subagent" in payload["source"]:
-                        return
+                        child = True
                     session = payload.get("id") or session
                 elif row.get("type") == "turn_context":
-                    if isinstance(payload.get("model"), str) and payload["model"]:
-                        model = payload["model"]
-                elif row.get("type") == "response_item" and prompt:
-                    _codex_tool_activity(payload, activity, tool_details, calls, model)
-                elif row.get("type") == "event_msg" and payload.get("type") == "exec_command_end":
-                    call_id = payload.get("call_id")
-                    if isinstance(call_id, str) and call_id in calls:
-                        _record_tool_result(tool_details[calls[call_id]], payload, output_key="aggregated_output")
+                    model = payload["model"] if isinstance(payload.get("model"), str) and payload["model"] else model
+                else:
+                    event = _codex_tool_event(row, payload)
+                    if event:
+                        step, detail = event
+                        call_id = detail.get("call_id")
+                        # Later event mirrors and background results may arrive after another turn starts.
+                        owner = call_turns.get(call_id, turn) if step[0] == "tool_result" else turn
+                        if call_id:
+                            call_turns[call_id] = owner
+                        if model and owner is turn:
+                            detail.setdefault("model", model)
+                        owner.add(step, detail)
             msg = _codex(row, legacy)
         if msg is None:
             continue
         if msg.role in ("prompt", "boundary"):
-            if prompt and answer:
-                answer.activity = activity
-                answer.tool_details = tool_details
-                yield session, start, prompt, answer
+            if answer or turn.steps:
+                finished.append((session, start, prompt, answer, turn, model))
             prompt, answer, start = msg.text, None, line_no
-            activity = []
-            tool_details, calls = {}, {}
-        elif prompt:
-            if (source == "claude-code" and answer and not msg.text
-                    and any(kind == "tool_call" for kind, _ in msg.activity)):
+            turn = TurnActivity()
+        elif prompt or msg.activity:
+            if source == "claude-code" and answer and any(kind == "tool_call" for kind, _ in msg.activity):
                 progress = ("progress", answer.text)
-                if progress not in activity and progress not in msg.activity:
-                    if answer.model:
-                        tool_details[len(activity)] = {"model": answer.model}
-                    activity.append(progress)
+                if progress not in turn.steps and progress not in msg.activity:
+                    turn.add(progress, {"model": answer.model} if answer.model else None)
+                answer = None
             for index, step in enumerate(msg.activity):
-                if step[0] == "tool_call" or step not in activity:
+                if step[0] in ("tool_call", "tool_result") or step not in turn.steps:
                     detail = dict(msg.tool_details.get(index, {}))
-                    call_id = detail.pop("call_id", None)
                     if msg.model or model:
                         detail["model"] = msg.model or model
-                    if detail:
-                        tool_details[len(activity)] = detail
-                    if isinstance(call_id, str):
-                        calls[call_id] = len(activity)
-                    activity.append(step)
-            if msg.role == "response":
-                answer = msg if msg.text else None
-                if answer and not answer.model:
+                    turn.add(step, detail)
+            if msg.role == "response" and msg.text:
+                answer = msg
+                if not answer.model:
                     answer.model = model
-    if prompt and answer:
-        answer.activity = activity
-        answer.tool_details = tool_details
-        yield session, start, prompt, answer
+    finished.append((session, start, prompt, answer, turn, model))
+    for name, position, request, response, activity, last_model in finished:
+        saved = activity.finish(response, model=last_model, tools_only=child)
+        if saved and (request or saved.role == "activity"):
+            yield name, position, "" if child else request or "", saved
 
 
 def _prepare_activity(activity, config, *, keep_code=None, tool_details=None):
@@ -248,8 +274,8 @@ def _prepare_activity(activity, config, *, keep_code=None, tool_details=None):
         if not isinstance(text, str) or not text.strip():
             continue
         prepared = redact(text, config, keep_code=keep_code)
-        if prepared.scrubbed:
-            step = {"type": kind, "text": prepared.text}
+        if prepared.scrubbed or kind == "tool_call":
+            step = {"type": kind, "text": prepared.text if prepared.scrubbed else "Tool name held locally"}
             for field, value in (tool_details or {}).get(index, {}).items():
                 if field == "model":
                     label = redact(value, config)
@@ -258,6 +284,8 @@ def _prepare_activity(activity, config, *, keep_code=None, tool_details=None):
                     continue
                 if field in ACTIVITY_RESULT_FIELDS:
                     step[field] = value
+                    continue
+                if field not in ACTIVITY_PAYLOAD_FIELDS:
                     continue
                 payload = redact_tool_payload(value, config, keep_code=keep_code)
                 step[field] = payload.text
@@ -270,7 +298,7 @@ def _prepare_activity(activity, config, *, keep_code=None, tool_details=None):
 def _file_turns(file, source, reader, stats):
     if reader in ("claude", "codex") and file.suffix.lower() == ".jsonl":
         with file.open("rb") as stream:
-            yield from _turns(stream, source, file.stem, stats)
+            yield from _turns(stream, source, file.stem, stats, child=is_child_history(file))
     else:
         yield from read_turns(file, reader, stats)
 
@@ -287,14 +315,14 @@ def check_history_consent(config, vault):
         raise ValueError("Enable prompt import with dem config capture capture_prompts true.")
 
 
-def import_history(config, vault, source, path=None, seen=None, *, activity_for: Collection[str] | None = None):
+def import_history(config, vault, source, path=None, seen=None, *, conversation_ids: Collection[str] | None = None):
     check_history_consent(config, vault)
     files = history_files(source, path, config.data_dir / "history")
     reader = SOURCES[source].reader
     disabled = vault.disabled_history_chats(source)
     keep_code = config.enabled("capture", "capture_code")
-    stats = dict(files=len(files), imported=0, already_imported=0, activity_updated=0, disabled_skipped=0,
-                 malformed_lines=0, unreadable_files=0)
+    stats = dict(files=len(files), imported=0, already_imported=0, activity_updated=0, activity_only=0,
+                 disabled_skipped=0, malformed_lines=0, unreadable_files=0)
     for file in files:
         try:
             stamp = file.stat()
@@ -303,32 +331,51 @@ def import_history(config, vault, source, path=None, seen=None, *, activity_for:
             if file.suffix.lower() in (".sqlite", ".db") and wal.is_file():
                 wal_info = wal.stat()
                 signature += (wal_info.st_size, wal_info.st_mtime_ns)
+            if source == "antigravity" and file.name == "transcript.jsonl":
+                sibling = file.with_name("transcript_full.jsonl")
+                if sibling.is_file() and not sibling.is_symlink():
+                    sibling_info = sibling.stat()
+                    signature += (sibling_info.st_size, sibling_info.st_mtime_ns)
             if seen is not None and seen.get((source, file)) == signature:
                 continue
             for session, start, prompt, answer in _file_turns(file, source, reader, stats):
                 conv = vault.keys.tag(f"{source}:{session}")
-                if activity_for is not None and conv not in activity_for:
+                if conversation_ids is not None and conv not in conversation_ids:
                     continue
                 if conv in disabled:
                     stats["disabled_skipped"] += 1
+                    continue
+                unfinished_id = vault.keys.tag(f"activity:{conv}:{start}")
+                if answer.role == "activity":
+                    activity = _prepare_activity(answer.activity, config, tool_details=answer.tool_details)
+                    if not activity:
+                        continue
+                    preview = redact(prompt, config)
+                    event = CaptureEvent(
+                        id=unfinished_id, source=source, surface=source, role="activity", consent="local",
+                        text="", conversation_id=conv, turn_index=start * 2, model_hint=answer.model,
+                        raw_hash=sha256_text(prompt) if prompt else "",
+                        redacted_text=preview.text if preview.scrubbed else "", activity=activity,
+                        quarantine_reason=preview.quarantine_reason,
+                        metadata={"history_activity_origin": answer.local_reason} if answer.local_reason else {},
+                    )
+                    if vault.save_unfinished_history(event):
+                        stats["activity_only"] += 1
                     continue
                 turn = vault.keys.tag(f"{conv}:{start}:{sha256_text(prompt)}:{sha256_text(answer.text)}")
                 if vault.history_imported(turn):
                     stats["already_imported"] += 1
                     if answer.activity:
                         previous = vault.get_history_activity(turn)
+                        activity = _prepare_activity(answer.activity, config, tool_details=answer.tool_details)
                         restore_code = (keep_code and previous is not None
-                                        and any(CODE_BLOCK_REMOVED in step["text"] for step in previous)
-                                        and _prepare_activity(answer.activity, config, keep_code=False) == previous)
-                        if previous is None or restore_code or any(answer.tool_details.values()):
-                            activity = _prepare_activity(answer.activity, config, tool_details=answer.tool_details)
-                            old_details = sum(field in step for step in (previous or []) for field in ACTIVITY_PAYLOAD_FIELDS)
-                            new_details = sum(field in step for step in activity for field in ACTIVITY_PAYLOAD_FIELDS)
-                            if ((activity or restore_code) and activity != previous and new_details >= old_details
-                                    and vault.add_history_activity(turn, conv, activity, previous=previous)):
+                                        and _prepare_activity(answer.activity, config, keep_code=False,
+                                                              tool_details=answer.tool_details) == previous)
+                        if not restore_code:
+                            activity = merge_history_activity(previous, activity)
+                        if activity and activity != previous:
+                            if vault.add_history_activity(turn, conv, activity, previous=previous):
                                 stats["activity_updated"] += 1
-                    continue
-                if activity_for is not None:
                     continue
                 events = []
                 for index, (role, text) in enumerate((("prompt", prompt), ("response", answer.text))):
@@ -343,7 +390,7 @@ def import_history(config, vault, source, path=None, seen=None, *, activity_for:
                         quarantine_reason=prepared.quarantine_reason,
                         metadata={"history_turn": turn, "derived_from": "proprietary-api-output"},
                     ))
-                stats[vault.add_history_pair(turn, *events)] += 1
+                stats[vault.add_history_pair(turn, *events, unfinished_id=unfinished_id)] += 1
         except (sqlite3.Error, zipfile.BadZipFile, OSError, ValueError, RuntimeError):
             stats["unreadable_files"] += 1
             continue

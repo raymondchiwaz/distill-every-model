@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from dem.adapters.history import _prepare_activity, import_history
+from dem.models import CaptureEvent
 from dem.pipeline.formatter import build_records
 from dem.pipeline.evidence import collect_task_evidence
 from dem.pipeline.release import build_release
@@ -25,6 +26,33 @@ class TestHistory(TempEnv):
 
     def run_import(self, source):
         return import_history(self.config, self.vault, source, self.transcript)
+
+    def test_bulk_history_approval_respects_source_and_message_eligibility(self):
+        def capture(event_id, chat_id, source="codex", **overrides):
+            fields = {"redacted_text": "An example response."} | overrides
+            self.vault.add_capture(CaptureEvent(id=event_id, source=source, surface=source, role="response",
+                                                text="An example response.", conversation_id=chat_id, turn_index=0,
+                                                **fields))
+
+        capture("first", "one")
+        capture("second", "two")
+        capture("other-source", "three", source="claude-code")
+        capture("disabled", "four")
+        capture("held", "one", quarantine_reason="sensitive")
+        capture("rejected", "one", consent="rejected")
+        capture("empty", "one", redacted_text="")
+        capture("manual", "manual", source="manual")
+        self.vault.set_history_chat_enabled("four", False)
+
+        self.assertEqual(self.vault.approve_history_chats([]), 0)
+        self.assertEqual(self.vault.approve_history_chats(["one", "one", "three", "four"], source="codex"), 1)
+        self.assertEqual({event.id for event in self.vault.approved_captures()}, {"first"})
+        self.assertEqual(self.vault.approve_history_chats(["two", "three", "manual"]), 2)
+        self.assertEqual({event.id for event in self.vault.approved_captures()}, {"first", "second", "other-source"})
+        self.assertEqual(self.vault.approve_history_chats(["one", "two", "three"]), 0)
+        self.assertEqual(self.vault.get_capture("disabled").consent, "pending")
+        self.assertEqual(self.vault.get_capture("rejected").consent, "rejected")
+        self.assertEqual(self.vault.stats()["publishes"], 0)
 
     def test_claude_pair_review_reimport_and_append(self):
         def row(role, content, **flags):

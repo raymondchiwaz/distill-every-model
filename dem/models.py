@@ -11,7 +11,7 @@ from typing import Any
 CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 SCHEMA_VERSION = "1.0.0"
 ACTIVITY_PAYLOAD_FIELDS = ("input", "output")
-ACTIVITY_RESULT_FIELDS = ("exit_code", "is_error")
+ACTIVITY_RESULT_FIELDS = ("exit_code", "is_error", "status")
 TASK_OUTCOMES = {"solved": "Solved", "partial": "Partly solved", "unsolved": "Unsolved"}
 
 
@@ -41,14 +41,14 @@ class CaptureEvent:
     id: str
     source: str                 # ollama | api_proxy | cli | browser | manual
     surface: str                # e.g. localhost:11434, chatgpt.com
-    role: str                   # prompt | response | system
+    role: str                   # prompt | response | system | activity
     text: str
     conversation_id: str
     turn_index: int
     model_hint: str = ""
     timestamp: str = field(default_factory=now_utc)
     raw_hash: str = ""
-    consent: str = "pending"    # pending | approved | rejected | redacted
+    consent: str = "pending"    # pending | approved | rejected | redacted | local
     redacted_text: str | None = None
     redactions: list[dict] = field(default_factory=list)
     quarantine_reason: str | None = None

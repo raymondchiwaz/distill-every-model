@@ -9,7 +9,8 @@ from huggingface_hub import DatasetCard
 from huggingface_hub.hf_api import RepoUrl
 
 from dem.community import prepare_contribution, submit_contribution
-from dem.models import DatasetRecord
+from dem.models import CaptureEvent, DatasetRecord
+from dem.pipeline.formatter import build_records
 from dem.pipeline.release import SHARD_NAME, build_release
 from dem.publisher import PublishError, export_hub_bundle, prepare_private_chats, publish, upload_hub_bundle
 from tests.test_all import TempEnv
@@ -28,6 +29,25 @@ def record(tier, conversation, prompt, response):
 
 
 class TestHuggingFace(TempEnv):
+    def test_chat_batch_excludes_unselected_unapproved_and_disabled_pairs(self):
+        for chat_id, answer_consent in (("selected", "approved"), ("unselected", "approved"),
+                                       ("pending", "pending"), ("disabled", "approved")):
+            for index, role in enumerate(("prompt", "response")):
+                text = f"{chat_id} {role}"
+                self.vault.add_capture(CaptureEvent(
+                    id=f"{chat_id}-{role}", source="codex", surface="codex", role=role,
+                    text=text, redacted_text=text, conversation_id=chat_id, turn_index=index,
+                    consent="approved" if role == "prompt" else answer_consent,
+                    metadata={"history_turn": chat_id},
+                ))
+        self.vault.set_history_chat_enabled("disabled", False)
+
+        batch = build_records(self.vault, self.config, conversation_ids=("selected", "pending", "disabled"))
+        self.assertEqual([record.prompt for record in batch], ["selected prompt"])
+        self.assertEqual(build_records(self.vault, self.config, conversation_ids=()), [])
+        self.assertEqual({record.prompt for record in build_records(self.vault, self.config)},
+                         {"selected prompt", "unselected prompt"})
+
     def mixed_release(self):
         clean = record("clean", "conv-1", "Why is the sky blue?",
                        "Rayleigh scattering preferentially scatters shorter wavelengths of sunlight. "

@@ -99,8 +99,12 @@ def cmd_decide(args) -> int:
         print(f"{decision}: {len(events)} pending events processed "
               "(quarantined items are never published).")
     else:
-        if not vault.get_capture(args.id):
+        event = vault.get_capture(args.id)
+        if event is None:
             print("capture not found")
+            return 1
+        if event.role == "activity":
+            print("This activity is stored locally until the turn has a final reply.")
             return 1
         vault.update_consent(args.id, decision)
         print(f"{decision}: {args.id}")
@@ -141,7 +145,7 @@ def cmd_import_history(args) -> int:
             failed = False
             for source in sources:
                 stats = import_history(config, vault, source, args.path, seen=seen)
-                if first_pass or stats["imported"] or stats["unreadable_files"]:
+                if first_pass or any(stats[key] for key in ("imported", "activity_updated", "activity_only", "unreadable_files")):
                     print(f"{source} {json.dumps(stats)}", flush=True)
                 failed |= bool(stats["unreadable_files"])
             if not args.watch:
@@ -164,7 +168,7 @@ def cmd_import_history(args) -> int:
 
 def cmd_review(args) -> int:
     config, _, _, vault = _context()
-    serve_blocking(config, vault)
+    serve_blocking(config, vault, open_browser=args.open_browser)
     return 0
 
 
@@ -345,7 +349,9 @@ def build_parser() -> argparse.ArgumentParser:
         dec.add_argument("--all", action="store_true", help=f"{action} all pending non-quarantined captures")
         dec.set_defaults(func=cmd_decide)
 
-    sub.add_parser("review", help="start localhost review UI").set_defaults(func=cmd_review)
+    review = sub.add_parser("review", help="start localhost review UI")
+    review.add_argument("--open", dest="open_browser", action="store_true", help="open the workspace in your browser")
+    review.set_defaults(func=cmd_review)
     sub.add_parser("daemon", help="start capture daemon (or: demd)")
 
     rel = sub.add_parser("release", help="build a versioned release from approved records")

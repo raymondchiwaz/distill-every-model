@@ -15,12 +15,37 @@ Capture → encrypted local vault → redaction → review → Hugging Face
 
 ## Quickstart
 
+On macOS or Linux with Python 3.11+ and venv support, install the released CLI for your user account.
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/raymondchiwaz/distill-every-model/v0.3.1/scripts/install.sh | sh
+~/.local/bin/dem review --open
+```
+
+Install with npm if you have Node.js, npm, and Python 3.11 or newer with `venv` and `pip` support.
+
+```bash
+npm install -g @distilleverymodel/distill-every-model
+dem review --open
+```
+
+The first `dem` or `demd` command downloads the Python dependencies into a per-user cache. It needs internet access for that setup.
+
+To install from a source checkout instead, run:
+
 ```bash
 cd "Distill Every Model"
 pip install -e .
-dem init                         # data dir, keys, encrypted vault, default config
-dem onboard                      # plain-language consent wizard (type "I CONSENT")
-dem daemon                       # start capture proxies (Ctrl-C to stop)
+dem review --open
+```
+
+The workspace opens in your browser. You can also use the localhost link printed in the terminal. Click **Choose a chat source**, select your tool, and import its saved sessions or enter a local transcript path. DEM asks for consent on first import. Open a conversation in **Chat history** to review it. Sharing to Hugging Face is optional.
+
+### Capture live Ollama sessions
+
+```bash
+dem onboard                      # first-run consent for live capture
+dem daemon                       # leave the capture proxy running
 ```
 
 Point Ollama at the local proxy:
@@ -30,7 +55,7 @@ export OLLAMA_HOST=http://127.0.0.1:11435
 ollama run llama3.1 "Why is the sky blue?"
 ```
 
-Open the review workspace:
+Open the review workspace in another terminal:
 
 ```bash
 dem review
@@ -40,8 +65,9 @@ Everything lives under `DEM_HOME` (default `~/.local/share/dem`). To use a throw
 
 ## Contribute to the Hugging Face community dataset
 
-1. Open a chat, review its prompts, answers, and activity, then click **Approve chat and continue**.
-2. Click **Send to community**. DEM uses your Hugging Face CLI sign-in, or you can enter your own token with pull request access.
+1. In **Chat history**, select chats and click **Approve selected chats**. You can also approve an open chat from its detail page.
+2. Click **Export to Hugging Face** in Chat history. It previews approved pairs from your selection, or from all chats shown if nothing is selected.
+3. Click **Send to community**. DEM uses your Hugging Face CLI sign-in, or you can enter your own token with pull request access.
 
 Your contribution becomes public as soon as the pull request opens. The dataset maintainer merges accepted contributions. DEM sends each batch to `data/submissions/` as a separate JSONL file.
 
@@ -63,7 +89,7 @@ dem contribute --chat CHAT_ID --repo owner/dataset --send REVIEW_TOKEN --via-hf-
 
 ### Upload to a private dataset
 
-1. Open a chat, review its prompts, answers, and activity, then click **Approve chat and continue**.
+1. Open a chat, review its prompts, answers, and activity, then click **Approve entire chat**.
 2. Expand **Upload to a private dataset**, then click **Upload to Hugging Face**. DEM uses your existing Hugging Face CLI sign-in or asks for a write token.
 3. Click **Open on Hugging Face** to view your private dataset.
 
@@ -88,7 +114,7 @@ Use `dem publish --version X --repo owner/name` for scripted uploads. Add `--pub
 
 ## Import past coding-agent chats
 
-From a checkout with DEM installed, run the following to prepare training pairs from your saved CLI sessions.
+With DEM installed, run the following to prepare training pairs from your saved CLI sessions.
 
 ```bash
 dem onboard                           # once per vault
@@ -103,7 +129,9 @@ DEM reads Claude Code project transcripts under `$CLAUDE_CONFIG_DIR/projects` (d
 
 Open the localhost link printed by `dem review`. **Chat history** lists each imported conversation. Turn a chat off to pause importing new turns and exclude it from future releases. Turn it back on to restore its previous review decisions. Use **Import chats** to pick up saved turns. On first use, the interface asks for consent to import local prompts and responses, including outputs from paid models. Open any conversation to review its prompt and answer. Existing release files are snapshots.
 
-Use the **Codex**, **Claude Code**, and **OpenCode** shortcuts to jump directly to those chats. On a source page, the import button scans that source. If your transcripts are saved elsewhere, use **Import from a file or folder** and enter the local path.
+In **Chat history**, check individual chats or click **Select all chats**, then click **Approve selected chats**. Select all follows the current title search, source, and status filters. Uploading is a separate action.
+
+Use the **Codex**, **Claude Code**, and **OpenCode** shortcuts to jump directly to those chats. On a source page, the import button opens the importer with that tool selected. If your transcripts are saved elsewhere, use **Import from a file or folder** and enter the local path.
 
 ### Supported sources
 
@@ -117,10 +145,11 @@ Use the **Codex**, **Claude Code**, and **OpenCode** shortcuts to jump directly 
 | Continue | `continue` | Local session JSON |
 | Crush | `crush` | Current project's `.crush/crush.db`, or an explicitly selected database |
 | Cursor | `cursor` | Local agent JSONL and role-labeled text transcripts |
+| DeepSeek Harness | `deepseek` | Compressed and plain JSONL in `$DSH_HOME/sessions` (default `~/.dsh/sessions`) and session export ZIPs |
 | Factory Droid | `droid` | Local Factory session JSONL |
 | Gemini CLI | `gemini-cli` | Saved session JSON and JSONL |
 | GitHub Copilot CLI | `copilot` | Local `session-state/*/events.jsonl` |
-| Google Antigravity | `antigravity` | Local agent transcript JSONL when present |
+| Google Antigravity | `antigravity` | App, CLI, and IDE transcript JSONL with tool results and matching full-log payloads when available |
 | Goose | `goose` | Local `sessions.db` |
 | Kilo Code | `kilo-code` | VS Code task `ui_messages.json` |
 | Kimi Code CLI | `kimi-cli` | Local session `context.jsonl` |
@@ -134,7 +163,7 @@ Use the **Codex**, **Claude Code**, and **OpenCode** shortcuts to jump directly 
 
 For a custom location or exported chat, run `dem import-history <source> --path /path/to/file-or-directory`. You can also place exports in `<DEM data dir>/history/<source>/` and click **Import chats**. DEM reads local files and labels each recovered conversation by source. Cloud-only chats must be exported in a supported format before import.
 
-Imported messages enter the encrypted review queue. **Models used** lists recorded models in order. Open a model to jump to the first reply or activity at that point in the chat. For Codex, Claude Code, and OpenCode, expand a tool call to see its saved input and output. Redacted activity from held replies is available for local review. Use the source's **Import chats** button to add details to older imports. Review newly added activity before uploading.
+Imported messages enter the encrypted review queue. **Models used** lists recorded models in order. Open a model to jump to the first reply or activity at that point in the chat. **Tool calls** lists each saved invocation in transcript order, including repeated calls. Open an entry to see the redacted input, output, and status where the harness saved them. DEM keeps tool activity from turns without a final reply in the local vault. The detail view marks unavailable input and output explicitly. Coverage depends on what the harness writes to its local transcript. Plain-text logs such as Aider’s may expose output without a tool name. Detected subagent transcripts, including Claude Code, Codex, OpenCode, Crush, and Kiro sessions, appear as separate local tool histories. Use **Check saved chat for activity** to refresh a transcript in its usual location, or use **Import chats** to reimport a custom file. Newly added activity requires review before uploading.
 
 ---
 

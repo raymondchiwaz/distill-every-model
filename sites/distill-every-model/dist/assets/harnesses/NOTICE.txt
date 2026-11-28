@@ -1,0 +1,64 @@
+Chat source logos
+=================
+
+These marks identify the tools that created the transcripts. Product names
+and marks belong to their respective owners. The images have been resized
+and packaged as PNGs for local use.
+
+Lobe Icons (@lobehub/icons-static-svg 1.106.0, MIT)
+https://github.com/lobehub/lobe-icons
+
+Amp, Antigravity, Claude Code, Cline, Codex, Cursor, DeepSeek, Gemini CLI, GitHub Copilot,
+Goose, Kilo Code, Kiro, OpenCode, OpenHands, Pi, and Roo Code.
+
+Upstream project and product assets
+
+Aider
+https://github.com/Aider-AI/aider/blob/main/aider/website/assets/icons/android-chrome-192x192.png
+
+Continue (Copyright 2023 Continue Dev, Inc.)
+https://github.com/continuedev/continue/blob/main/extensions/intellij/src/main/resources/META-INF/pluginIcon.svg
+
+Crush (Copyright 2025-2026 Charmbracelet, Inc.)
+https://github.com/charmbracelet/crush/blob/main/internal/ui/notification/crush-icon-solo.png
+https://github.com/charmbracelet/crush/blob/main/LICENSE.md
+
+Factory Droid
+https://www.factory.ai/favicon.svg
+
+Kimi Code CLI
+https://github.com/MoonshotAI/kimi-cli/blob/main/web/public/logo.png
+
+Mistral Vibe (Copyright 2025 Mistral AI)
+https://github.com/mistralai/mistral-vibe/blob/main/distribution/zed/icons/mistral_vibe.svg
+
+Qwen Code (Copyright 2025 Google LLC; Copyright 2025 Qwen)
+https://github.com/QwenLM/qwen-code/blob/main/packages/desktop/bootstrap/qwen-code-logo.svg
+
+Lobe Icons license
+==================
+
+MIT License
+
+Copyright (c) 2023 LobeHub
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+Ollama's mark identifies live session capture.
+https://ollama.com/public/ollama.png
