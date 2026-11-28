@@ -1,0 +1,49 @@
+#!/bin/sh
+# Install the released DEM CLI for the current user on macOS or Linux.
+set -eu
+
+install_dem() {
+    version=0.3.0
+    runtime="${XDG_DATA_HOME:-$HOME/.local/share}/distill-every-model/cli-$version"
+    bin_dir="${DEM_BIN_DIR:-$HOME/.local/bin}"
+    python="${DEM_PYTHON:-python3}"
+    package="https://registry.npmjs.org/@distilleverymodel/distill-every-model/-/distill-every-model-$version.tgz"
+    digest="2949bd272cbff76eecfb27cc63559a562b44a814f4d60fbfc0625c2cb40f6a06d01ad516daba28bf611619d9fc0a672c8fb3e309dcfdd0cd2cafe85750294c8e"
+
+    "$python" -c 'import venv, ensurepip, sys; sys.exit(sys.version_info < (3, 11))' || {
+        echo "Install Python 3.11 or newer with venv and pip support, then rerun the installer." >&2
+        return 1
+    }
+    mkdir -p "$bin_dir" "$(dirname "$runtime")"
+    for name in dem demd; do
+        if [ -e "$bin_dir/$name" ] || [ -L "$bin_dir/$name" ]; then
+            if [ "$(readlink "$bin_dir/$name" || true)" != "$runtime/bin/$name" ]; then
+                echo "An existing $bin_dir/$name belongs to another installation. Set DEM_BIN_DIR to a different directory." >&2
+                return 1
+            fi
+        fi
+    done
+    if [ ! -f "$runtime/.installed" ]; then
+        mkdir "$runtime.lock" || {
+            echo "A setup may be running. Check $runtime.lock before retrying." >&2
+            return 1
+        }
+        trap 'rmdir "$runtime.lock"' 0
+        trap 'exit 1' HUP INT TERM
+        "$python" -m venv "$runtime"
+        "$runtime/bin/python" -m pip install --disable-pip-version-check "dem-distill-every-model @ $package#sha512=$digest"
+        "$runtime/bin/dem" --version
+        touch "$runtime/.installed"
+    fi
+    for name in dem demd; do
+        if [ ! -L "$bin_dir/$name" ]; then
+            ln -s "$runtime/bin/$name" "$bin_dir/$name"
+        fi
+    done
+    case ":$PATH:" in
+        *":$bin_dir:"*) echo 'Installed. Run dem review --open to begin.' ;;
+        *) echo "Installed in $bin_dir. Add this directory to PATH or run \"$bin_dir/dem\" review --open." ;;
+    esac
+}
+
+install_dem
