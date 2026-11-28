@@ -118,16 +118,16 @@
               <h4>curl <small>macOS &amp; Linux</small></h4>
               <div class="code-block">
                 <div class="code-bar"><span>Shell</span><button type="button" class="copy" hidden>Copy</button></div>
-                <pre><code>curl -fsSL https://github.com/raymondchiwaz/distill-every-model/releases/download/v0.3.1/install.sh | sh</code></pre>
+                <pre><code>curl -fsSL https://github.com/raymondchiwaz/distill-every-model/releases/latest/download/install.sh | sh</code></pre>
               </div>
               <p>Launch with <code>~/.local/bin/dem review --open</code>.</p>
-              <a class="text-link" href="https://github.com/raymondchiwaz/distill-every-model/releases/download/v0.3.1/install.sh">Download the installer</a>
+              <a class="text-link" href="https://github.com/raymondchiwaz/distill-every-model/releases/latest/download/install.sh">Download the installer</a>
             </article>
             <article>
               <h4>npm <small>Windows, macOS &amp; Linux</small></h4>
               <div class="code-block">
                 <div class="code-bar"><span>Terminal</span><button type="button" class="copy" hidden>Copy</button></div>
-                <pre><code>npm install -g https://github.com/raymondchiwaz/distill-every-model/releases/download/v0.3.1/distilleverymodel-distill-every-model-0.3.1.tgz</code></pre>
+                <pre><code>npm install -g https://github.com/raymondchiwaz/distill-every-model/releases/download/v0.3.2/distilleverymodel-distill-every-model-0.3.2.tgz</code></pre>
               </div>
               <p>Launch with <code>dem review --open</code>. The first run installs Python dependencies.</p>
               <a class="text-link" href="https://www.npmjs.com/package/@distilleverymodel/distill-every-model">View the npm package</a>
@@ -261,7 +261,7 @@ ollama run llama3.1 "Why is the sky blue?"</code></pre>
           <h3>Share a reviewed chat</h3>
           <ol>
             <li><strong>Review and approve.</strong> Open the conversation locally, read the redacted prompts and answers, then approve the chat you want to share.</li>
-            <li><strong>Preview the export.</strong> Open the Hugging Face export and enter the community’s <code>owner/dataset</code>. Check the exact records in the batch.</li>
+            <li><strong>Preview the export.</strong> Open the Hugging Face export and check the exact records in the batch. DEM preselects the <a class="text-link" href="https://huggingface.co/datasets/Distilleverymodel/community-chats">community dataset</a>.</li>
             <li><strong>Send to community.</strong> Sign in with a Hugging Face account that can open pull requests. The selected batch is public as soon as the pull request opens.</li>
           </ol>
           <a class="text-link" href="https://github.com/raymondchiwaz/distill-every-model#contribute-to-the-hugging-face-community-dataset">Read the contribution guide</a>
