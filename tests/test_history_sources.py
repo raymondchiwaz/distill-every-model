@@ -1,6 +1,7 @@
 import json
 import sqlite3
 import zipfile
+from unittest.mock import patch
 
 from dem.adapters.history import import_history
 from dem.history_sources import SOURCES
@@ -114,10 +115,41 @@ class TestHarnessImports(TempEnv):
                              "CREATE TABLE session_message(id TEXT, session_id TEXT, seq INTEGER, data TEXT, type TEXT);"
                              "CREATE TABLE session_part(session_id TEXT, message_id TEXT, ordinal INTEGER, data TEXT, type TEXT);")
             db.execute("INSERT INTO session_message VALUES ('a', 'one', 1, ?, 'user')", (json.dumps({"text": PROMPT}),))
-            db.execute("INSERT INTO session_message VALUES ('b', 'one', 2, '{}', 'assistant')")
+            db.execute("INSERT INTO session_message VALUES ('b', 'one', 2, ?, 'assistant')",
+                       (json.dumps({"model": {"id": "tool-model"}}),))
             db.execute("INSERT INTO session_part VALUES ('one', 'b', 1, ?, 'text')",
+                       (json.dumps({"type": "text", "text": "I’ll check the sort key."}),))
+            db.execute("INSERT INTO session_part VALUES ('one', 'b', 2, ?, 'tool')",
+                       (json.dumps({"type": "tool", "name": "read",
+                                    "state": {"input": {"path": "sort.py"}, "status": "completed",
+                                              "content": [{"type": "text", "text": "Saved result"}]}}),))
+            db.execute("INSERT INTO session_message VALUES ('c', 'one', 3, ?, 'assistant')",
+                       (json.dumps({"model": {"id": "answer-model"}}),))
+            db.execute("INSERT INTO session_part VALUES ('one', 'c', 1, ?, 'text')",
                        (json.dumps({"type": "text", "text": ANSWER}),))
-        self.assertEqual(import_history(self.config, self.vault, "opencode", path)["imported"], 1)
+        with patch("dem.adapters.history._prepare_activity", return_value=[]):
+            self.assertEqual(import_history(self.config, self.vault, "opencode", path)["imported"], 1)
+        chat = next(chat for chat in self.vault.history_chats() if chat["source"] == "opencode")
+        ids = {chat["conversation_id"]}
+        initial = self.vault.history_messages(chat["conversation_id"])
+        result = import_history(self.config, self.vault, "opencode", path, activity_for=ids)
+        self.assertEqual((result["imported"], result["activity_updated"]), (0, 1))
+        prompt, answer = self.vault.history_messages(chat["conversation_id"])
+        self.assertEqual([event.id for event in initial], [prompt.id, answer.id])
+        self.assertEqual(answer.model_hint, "answer-model")
+        self.assertEqual(answer.activity, [
+            {"type": "progress", "text": "I’ll check the sort key.", "model": "tool-model"},
+            {"type": "tool_call", "text": "read", "model": "tool-model", "input": '{\n  "path": "sort.py"\n}',
+             "output": "Saved result", "is_error": "false"},
+        ])
+
+        self.vault.set_redaction(answer.id, answer.redacted_text, [], "held for review")
+        with self.vault.db:
+            self.vault.db.execute("DELETE FROM history_activity WHERE capture_id=?", (answer.id,))
+        self.vault.update_consent(prompt.id, "approved")
+        self.assertEqual(import_history(self.config, self.vault, "opencode", path, activity_for=ids)["activity_updated"], 1)
+        self.assertEqual(self.vault.history_messages(chat["conversation_id"])[1].activity, answer.activity)
+        self.assertEqual(build_records(self.vault, self.config), [])
 
         root = self.config.data_dir / "history" / "kiro"
         root.mkdir(parents=True)
@@ -131,4 +163,36 @@ class TestHarnessImports(TempEnv):
         record, = build_records(self.vault, self.config)
         self.assertEqual(record.source_tier, "restricted")
         self.vault.set_history_chat_enabled(chat["conversation_id"], False)
+        self.assertEqual(build_records(self.vault, self.config), [])
+
+    def test_opencode_inline_tools_and_model_switch_rows(self):
+        path = self.root / "opencode.db"
+        with sqlite3.connect(path) as db:
+            db.executescript("CREATE TABLE session_v2(id TEXT, parent_id TEXT);"
+                             "INSERT INTO session_v2 VALUES ('inline', NULL);"
+                             "CREATE TABLE session_message(id TEXT, session_id TEXT, seq INTEGER, data TEXT, type TEXT);"
+                             "CREATE TABLE session_part(session_id TEXT, message_id TEXT, ordinal INTEGER, data TEXT, type TEXT);")
+            rows = [
+                ("user", {"text": PROMPT}),
+                ("assistant", {"model": {"id": "model-first"}, "finish": "tool-calls", "content": [
+                    {"type": "tool", "name": "read", "state": {"input": {"path": "example.py"},
+                     "content": [{"type": "text", "text": "File contents"}], "status": "completed"}},
+                ]}),
+                ("model-switched", {"model": {"id": "model-second"}, "previous": {"id": "model-first"}}),
+                ("assistant", {"model": {"id": "model-second"}, "content": [
+                    {"type": "text", "text": "This reply mentions a confidential patient record."},
+                ]}),
+            ]
+            for position, (kind, data) in enumerate(rows, 1):
+                db.execute("INSERT INTO session_message VALUES (?, 'inline', ?, ?, ?)",
+                           (str(position), position, json.dumps(data), kind))
+        self.assertEqual(import_history(self.config, self.vault, "opencode", path)["imported"], 1)
+        chat, = self.vault.history_chats()
+        prompt, answer = self.vault.history_messages(chat["conversation_id"])
+        self.assertEqual(answer.model_hint, "model-second")
+        self.assertIsNotNone(answer.quarantine_reason)
+        self.assertEqual([(step["type"], step["model"]) for step in answer.activity],
+                         [("tool_call", "model-first"), ("model_change", "model-second")])
+        self.assertEqual(answer.activity[0]["output"], "File contents")
+        self.vault.update_consent(prompt.id, "approved")
         self.assertEqual(build_records(self.vault, self.config), [])

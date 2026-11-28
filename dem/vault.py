@@ -6,12 +6,15 @@ Everything is local — there is no network code in this module.
 from __future__ import annotations
 
 import json
+import secrets
 import sqlite3
 from pathlib import Path
 
+from .config import Config
 from .crypto import Keyring
 from .history_sources import HISTORY_SOURCES, SOURCE_PLACEHOLDERS
-from .models import CaptureEvent, now_utc
+from .models import TASK_OUTCOMES, CaptureEvent, now_utc
+from .privacy import CODE_BLOCK_REMOVED, redact
 
 
 class Vault:
@@ -37,6 +40,20 @@ class Vault:
             CREATE INDEX IF NOT EXISTS idx_captures_consent ON captures(consent);
             CREATE INDEX IF NOT EXISTS idx_captures_conv ON captures(conversation_id);
             CREATE TABLE IF NOT EXISTS history_imports (turn_key TEXT PRIMARY KEY);
+            CREATE TABLE IF NOT EXISTS history_activity (
+              capture_id TEXT PRIMARY KEY, turn_key TEXT NOT NULL UNIQUE, data_enc BLOB NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS history_outcomes (
+              capture_id TEXT PRIMARY KEY, status TEXT NOT NULL
+            );
+            CREATE TRIGGER IF NOT EXISTS delete_history_activity AFTER DELETE ON captures
+            BEGIN
+              DELETE FROM history_activity WHERE capture_id=OLD.id;
+            END;
+            CREATE TRIGGER IF NOT EXISTS delete_history_outcome AFTER DELETE ON captures
+            BEGIN
+              DELETE FROM history_outcomes WHERE capture_id=OLD.id;
+            END;
             CREATE TABLE IF NOT EXISTS disabled_chats (
               conversation_id TEXT PRIMARY KEY, source TEXT NOT NULL
             );
@@ -83,8 +100,42 @@ class Vault:
                 return "disabled_skipped"
             self._insert_capture(prompt)
             self._insert_capture(response)
+            if response.activity:
+                self.db.execute("INSERT INTO history_activity VALUES (?,?,?)",
+                                (response.id, turn_key, self.keys.encrypt(json.dumps(response.activity))))
         self.log_audit("history:import", turn_key, "consent-v3")
         return "imported"
+
+    def get_history_activity(self, turn_key: str) -> list[dict[str, str]] | None:
+        row = self.db.execute("SELECT data_enc FROM history_activity WHERE turn_key=?", (turn_key,)).fetchone()
+        return json.loads(self.keys.decrypt(row[0])) if row is not None else None
+
+    def add_history_activity(self, turn_key: str, conversation_id: str, activity: list[dict[str, str]], *,
+                             previous: list[dict[str, str]] | None = None) -> bool:
+        """Backfill activity on existing imports and require review of the added text."""
+        previous_ciphertext = None
+        if previous is not None:
+            row = self.db.execute("SELECT data_enc FROM history_activity WHERE turn_key=?", (turn_key,)).fetchone()
+            if row is None or json.loads(self.keys.decrypt(row[0])) != previous:
+                return False
+            previous_ciphertext = row[0]
+        with self.db:
+            inserted = self.db.execute(
+                "INSERT INTO history_activity (capture_id, turn_key, data_enc) "
+                "SELECT id, ?, ? FROM captures WHERE conversation_id=? AND role='response' "
+                "AND consent!='rejected' "
+                "AND json_extract(metadata, '$.history_turn')=? AND NOT EXISTS ("
+                "SELECT 1 FROM disabled_chats WHERE disabled_chats.conversation_id=captures.conversation_id) "
+                "ON CONFLICT(turn_key) DO UPDATE SET data_enc=excluded.data_enc WHERE history_activity.data_enc=?",
+                (turn_key, self.keys.encrypt(json.dumps(activity)), conversation_id, turn_key, previous_ciphertext),
+            )
+            if not inserted.rowcount:
+                return False
+            self.db.execute("UPDATE captures SET consent='pending' WHERE consent IN ('approved','redacted') "
+                            "AND quarantine_reason IS NULL "
+                            "AND id=(SELECT capture_id FROM history_activity WHERE turn_key=?)", (turn_key,))
+        self.log_audit("history:activity", turn_key, "consent-v3")
+        return True
 
     def disabled_history_chats(self, source: str) -> frozenset[str]:
         rows = self.db.execute("SELECT conversation_id FROM disabled_chats WHERE source=?", (source,))
@@ -142,13 +193,62 @@ class Vault:
             chats.append(chat)
         return chats
 
-    def history_messages(self, conversation_id: str) -> list[CaptureEvent]:
+    def history_messages(self, conversation_id: str, *, enabled_only: bool = False) -> list[CaptureEvent]:
         rows = self.db.execute(
-            f"SELECT * FROM captures WHERE conversation_id=? AND source IN ({SOURCE_PLACEHOLDERS}) "
-            "ORDER BY turn_index, rowid",
-            (conversation_id, *HISTORY_SOURCES),
+            "SELECT captures.*, history_activity.data_enc AS activity_enc, history_outcomes.status AS task_outcome "
+            "FROM captures "
+            "LEFT JOIN history_activity ON history_activity.capture_id=captures.id "
+            "LEFT JOIN history_outcomes ON history_outcomes.capture_id=captures.id "
+            f"WHERE conversation_id=? AND source IN ({SOURCE_PLACEHOLDERS}) "
+            "AND (NOT ? OR NOT EXISTS (SELECT 1 FROM disabled_chats "
+            "WHERE disabled_chats.conversation_id=captures.conversation_id)) ORDER BY turn_index, captures.rowid",
+            (conversation_id, *HISTORY_SOURCES, enabled_only),
         )
         return [self._row_to_event(row) for row in rows]
+
+    def history_review_snapshot(self, messages: list[CaptureEvent]) -> tuple[str, list[str]]:
+        pending = [(event.id, event.redacted_text, event.activity) for event in messages
+                   if event.consent == "pending" and not event.quarantine_reason and event.redacted_text]
+        if not pending:
+            return "", []
+        return self.keys.tag(json.dumps(pending)), [capture_id for capture_id, _, _ in pending]
+
+    @staticmethod
+    def history_outcome_target(messages: list[CaptureEvent]) -> CaptureEvent | None:
+        reviewable = [event for event in messages if event.consent in ("pending", "approved", "redacted")
+                      and not event.quarantine_reason and (event.redacted_text or "").strip()]
+        prompts = {event.metadata.get("history_turn") for event in reviewable if event.role == "prompt"}
+        return next((event for event in reversed(reviewable) if event.role == "response"
+                     and event.metadata.get("history_turn") in prompts), None)
+
+    def approve_history_chat(self, conversation_id: str, snapshot: str, *,
+                             outcome: str | None = None, outcome_target: str = "") -> bool:
+        if outcome is not None and outcome not in TASK_OUTCOMES and outcome != "unspecified":
+            return False
+        with self.db:
+            self.db.execute("BEGIN IMMEDIATE")
+            disabled = self.db.execute("SELECT 1 FROM disabled_chats WHERE conversation_id=?",
+                                       (conversation_id,)).fetchone()
+            messages = self.history_messages(conversation_id)
+            current, capture_ids = self.history_review_snapshot(messages)
+            if disabled or not secrets.compare_digest(current.encode(), snapshot.encode()):
+                return False
+            if outcome is not None:
+                target = self.history_outcome_target(messages)
+                if target is None or target.id != outcome_target:
+                    return False
+                if outcome == "unspecified":
+                    self.db.execute("DELETE FROM history_outcomes WHERE capture_id=?", (target.id,))
+                else:
+                    self.db.execute("INSERT INTO history_outcomes VALUES (?,?) "
+                                    "ON CONFLICT(capture_id) DO UPDATE SET status=excluded.status", (target.id, outcome))
+            if capture_ids:
+                self.db.executemany("UPDATE captures SET consent='approved' WHERE id=?",
+                                    ((capture_id,) for capture_id in capture_ids))
+            elif outcome is None:
+                return False
+        self.log_audit("history:approve" if capture_ids else "history:outcome", conversation_id, "consent-v3")
+        return True
 
     def latest_decision(self, source: str, version: str) -> str | None:
         row = self.db.execute(
@@ -187,6 +287,9 @@ class Vault:
             redactions=json.loads(row["redactions"] or "[]"),
             quarantine_reason=row["quarantine_reason"],
             metadata=json.loads(row["metadata"] or "{}"),
+            activity=(json.loads(self.keys.decrypt(row["activity_enc"]))
+                      if "activity_enc" in row.keys() and row["activity_enc"] else []),
+            task_outcome=row["task_outcome"] if "task_outcome" in row.keys() else None,
         )
 
     def list_captures(self, consent: str | None = None, limit: int = 500,
@@ -205,12 +308,17 @@ class Vault:
             ).fetchall()
         return [self._row_to_event(r) for r in rows]
 
-    def approved_captures(self) -> list[CaptureEvent]:
+    def approved_captures(self, conversation_id: str | None = None) -> list[CaptureEvent]:
         rows = self.db.execute(
-            "SELECT * FROM captures WHERE consent IN ('approved','redacted') "
+            "SELECT captures.*, history_activity.data_enc AS activity_enc, history_outcomes.status AS task_outcome "
+            "FROM captures "
+            "LEFT JOIN history_activity ON history_activity.capture_id=captures.id "
+            "LEFT JOIN history_outcomes ON history_outcomes.capture_id=captures.id "
+            "WHERE consent IN ('approved','redacted') AND (? IS NULL OR conversation_id=?) "
             "AND quarantine_reason IS NULL AND NOT EXISTS ("
             "SELECT 1 FROM disabled_chats WHERE disabled_chats.conversation_id=captures.conversation_id"
-            ") ORDER BY timestamp, rowid"
+            ") ORDER BY timestamp, captures.rowid",
+            (conversation_id, conversation_id),
         )
         return [self._row_to_event(row) for row in rows]
 
@@ -229,6 +337,43 @@ class Vault:
             (self.keys.encrypt(text), json.dumps(redactions), reason, capture_id),
         )
         self.db.commit()
+
+    def restore_code_blocks(self, config: Config) -> dict[str, int]:
+        """Restore unchanged captures from their encrypted originals and re-review changes."""
+        counts = {"restored": 0, "quarantined": 0, "skipped": 0}
+        rows = self.db.execute(
+            "SELECT id, text_enc, redacted_enc FROM captures "
+            "WHERE consent!='rejected' AND quarantine_reason IS NULL AND redacted_enc IS NOT NULL"
+        ).fetchall()
+        updates = []
+        for row in rows:
+            current = self.keys.decrypt(row["redacted_enc"])
+            if CODE_BLOCK_REMOVED not in current:
+                continue
+            original = self.keys.decrypt(row["text_enc"])
+            if redact(original, config, keep_code=False).text != current:
+                counts["skipped"] += 1
+                continue
+            prepared = redact(original, config, keep_code=True)
+            if prepared.text == current:
+                counts["skipped"] += 1
+                continue
+            updates.append((prepared, row))
+        with self.db:
+            for prepared, row in updates:
+                updated = self.db.execute(
+                    "UPDATE captures SET redacted_enc=?, redactions=?, quarantine_reason=?, consent='pending' "
+                    "WHERE id=? AND redacted_enc=? AND consent!='rejected' AND quarantine_reason IS NULL",
+                    (self.keys.encrypt(prepared.text), json.dumps(prepared.redactions), prepared.quarantine_reason,
+                     row["id"], row["redacted_enc"]),
+                )
+                if updated.rowcount:
+                    counts["quarantined" if prepared.quarantine_reason else "restored"] += 1
+                else:
+                    counts["skipped"] += 1
+        if updates:
+            self.log_audit("review:restore-code", json.dumps(counts), "consent-v3")
+        return counts
 
     def edit_capture(self, capture_id: str, text: str) -> None:
         """Reviewer-edited final text replaces the redacted snapshot."""
@@ -287,7 +432,7 @@ class Vault:
         )
         self.db.commit()
 
-    def add_publish(self, repo: str, commit_sha: str, manifest_sha: str, count: int) -> None:
+    def add_publish(self, repo: str, commit_sha: str | None, manifest_sha: str, count: int) -> None:
         from .models import ulid
         self.db.execute(
             "INSERT INTO publish_log VALUES (?,?,?,?,?,?)",

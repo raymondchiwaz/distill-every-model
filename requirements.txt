@@ -1,5 +1,2 @@
-# Core (v0.3) — runs on Python 3.11+ stdlib plus cryptography.
 cryptography>=41
-
-# Optional: publish to HuggingFace (otherwise publish falls back to local export).
-huggingface_hub>=0.20
+huggingface_hub>=0.34

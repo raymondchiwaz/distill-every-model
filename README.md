@@ -3,13 +3,12 @@
 > **Local-first, explicit-consent capture of LLM outputs into an open training-data commons.**
 > Your AI memory. The AI commons.
 
-DEM is a local daemon that captures the answers your LLM tools produce, redacts them on your machine, **asks you to approve the exact final text**, and — only if you choose — publishes it to HuggingFace as open training data for better open models.
+DEM captures chats from your LLM tools, redacts them on your machine, and helps you share selected chats on Hugging Face. You can review the upload yourself or authorize your AI to review and submit a selected batch.
 
-**Nothing is captured silently. Nothing is uploaded automatically.** Those aren't slogans; they're enforced in code: consent is default-deny, publish requires an explicit reviewed action, and every run makes zero network calls until you publish.
+Capture is opt-in. Each community submission starts with your authorization for the selected chats and destination.
 
 ```
-Capture → encrypted local vault → redaction → human review → dedup → quality gate
-        → versioned release → [explicit publish] → HuggingFace
+Capture → encrypted local vault → redaction → review → Hugging Face
 ```
 
 ---
@@ -18,7 +17,7 @@ Capture → encrypted local vault → redaction → human review → dedup → q
 
 ```bash
 cd "Distill Every Model"
-pip install -e .                 # or: pip install -r requirements.txt
+pip install -e .
 dem init                         # data dir, keys, encrypted vault, default config
 dem onboard                      # plain-language consent wizard (type "I CONSENT")
 dem daemon                       # start capture proxies (Ctrl-C to stop)
@@ -31,18 +30,59 @@ export OLLAMA_HOST=http://127.0.0.1:11435
 ollama run llama3.1 "Why is the sky blue?"
 ```
 
-Then review, build, and publish:
+Open the review workspace:
 
 ```bash
-dem review                       # localhost-only UI; approve/reject/edit each item
-# or for scripted use: dem approve --all
-dem release                      # dedup + quality gate + versioned release
-dem publish --dry-run 0.3.0      # full local preview; NO network calls
-dem publish --version 0.3.0      # explicit publish (HF token, else local export)
-dem status                       # vault stats, consent state, releases
+dem review
 ```
 
 Everything lives under `DEM_HOME` (default `~/.local/share/dem`). To use a throwaway directory: `export DEM_HOME=/tmp/dem-test`.
+
+## Contribute to the Hugging Face community dataset
+
+1. Open a chat, review its prompts, answers, and activity, then click **Approve chat and continue**.
+2. Click **Send to community**. DEM uses your Hugging Face CLI sign-in, or you can enter your own token with pull request access.
+
+Your contribution becomes public as soon as the pull request opens. The dataset maintainer merges accepted contributions. DEM sends each batch to `data/submissions/` as a separate JSONL file.
+
+For a community dataset, create a public dataset under your organization, enable discussions and pull requests in its settings, and share its `owner/dataset` name. In DEM you can enter the name on the upload screen or set it once with `dem config publish community_repo owner/dataset`. Configure the dataset card's training split to load `data/submissions/*.jsonl`.
+
+### Have your AI review and submit
+
+Use the [DEM contribution skill](.agents/skills/dem-contribute/SKILL.md) from this project. Sign in once with `hf auth login` using your Hugging Face account. Then give your agent a scoped request like this:
+
+> Use the DEM contribution skill to review last week's OpenCode chat about the test runner and submit it to `owner/dataset` if it is safe to share publicly. I have permission to share it under that dataset's terms.
+
+DEM runs redaction, privacy, and quality checks before showing the exact proposed upload. The agent checks it for sensitive details that the local rules may miss. It can skip questionable chats and send the cleared batch using `hf upload --create-pr` without asking you to review every pair. Use an agent you trust to see the redacted preview.
+
+```bash
+dem contribute --list
+dem contribute --chat CHAT_ID --repo owner/dataset
+dem contribute --chat CHAT_ID --repo owner/dataset --send REVIEW_TOKEN --via-hf-cli
+```
+
+### Upload to a private dataset
+
+1. Open a chat, review its prompts, answers, and activity, then click **Approve chat and continue**.
+2. Expand **Upload to a private dataset**, then click **Upload to Hugging Face**. DEM uses your existing Hugging Face CLI sign-in or asks for a write token.
+3. Click **Open on Hugging Face** to view your private dataset.
+
+The review workspace uploads approved pairs, including imported chats, after deduplication and safety checks. A token entered in the workspace is kept in memory for the current DEM session. You can set the dataset name under **Dataset name and sign-in**.
+
+On the review page, **Did this solve the task?** is optional. DEM attaches the contributor's choice to the latest reviewed prompt and response pair. **Task evidence** summarizes file changes, errors, and known checks reported in saved tool results. The dataset records that provenance alongside the contributor's outcome.
+
+Code blocks are kept in the review text and upload after redaction. For older vaults configured to omit code, run `dem config capture capture_code true` to restore code from the saved originals and review the changed messages. Import chats again to restore code in saved activity.
+
+For scripted publishing or a folder for manual upload, use the terminal:
+
+```bash
+dem release                      # build a release from approved captures
+dem publish --dry-run            # preview locally
+dem publish                      # confirm and upload the latest release
+dem publish --export             # write a folder for manual upload
+```
+
+Use `dem publish --version X --repo owner/name` for scripted uploads. Add `--public` to upload to a public dataset. The CLI upload and export use the clean partition. Uploading to an existing dataset replaces files with matching names, including its dataset card.
 
 ---
 
@@ -62,6 +102,8 @@ dem release                           # build local JSONL from approved pairs
 DEM reads Claude Code project transcripts under `$CLAUDE_CONFIG_DIR/projects` (default `~/.claude/projects`) and Codex rollouts under `$CODEX_HOME/sessions` and `$CODEX_HOME/archived_sessions` (default `~/.codex`). To select one saved session or a copied transcript directory, run `dem import-history codex --path /path/to/session.jsonl` or use `claude-code` in its place. History must be available as local JSONL. Run `dem import-history all --watch` to keep picking up saved turns every ten seconds, or rerun the one-time import after a new chat. The `both` shortcut selects Claude Code and Codex. The summary counts imported pairs, previously imported pairs, unreadable files and malformed lines.
 
 Open the localhost link printed by `dem review`. **Chat history** lists each imported conversation. Turn a chat off to pause importing new turns and exclude it from future releases. Turn it back on to restore its previous review decisions. Use **Import chats** to pick up saved turns. On first use, the interface asks for consent to import local prompts and responses, including outputs from paid models. Open any conversation to review its prompt and answer. Existing release files are snapshots.
+
+Use the **Codex**, **Claude Code**, and **OpenCode** shortcuts to jump directly to those chats. On a source page, the import button scans that source. If your transcripts are saved elsewhere, use **Import from a file or folder** and enter the local path.
 
 ### Supported sources
 
@@ -92,7 +134,7 @@ Open the localhost link printed by `dem review`. **Chat history** lists each imp
 
 For a custom location or exported chat, run `dem import-history <source> --path /path/to/file-or-directory`. You can also place exports in `<DEM data dir>/history/<source>/` and click **Import chats**. DEM reads local files and labels each recovered conversation by source. Cloud-only chats must be exported in a supported format before import.
 
-Imported messages enter the encrypted review queue. A pair becomes eligible for the local restricted dataset once both halves are approved and clear quarantine. Tool calls, tool results and reasoning blocks are skipped. The training files live under `releases/v<version>/data/restricted/` inside the DEM data directory. Releases containing restricted records support local export only.
+Imported messages enter the encrypted review queue. **Models used** lists recorded models in order. Open a model to jump to the first reply or activity at that point in the chat. For Codex, Claude Code, and OpenCode, expand a tool call to see its saved input and output. Redacted activity from held replies is available for local review. Use the source's **Import chats** button to add details to older imports. Review newly added activity before uploading.
 
 ---
 
@@ -107,7 +149,7 @@ Imported messages enter the encrypted review queue. A pair becomes eligible for 
 | Review | localhost-only token-gated UI, raw→redacted diff, approve/reject/edit, bulk-approve local captures; captured text rendered as escaped plain text only |
 | Pipeline | conversation pairing, exact + MinHash/LSH near-dup, weighted quality scoring with degenerate-output gate, PII re-scan |
 | Releases | semver versions, clean vs restricted partitions, train/val/test group splits, manifest + SHA-256, QC report, auto dataset card |
-| Publish | dry-run preview (zero network), personal HF repo upload (or local export fallback), idempotent publish log |
+| Publish | local preview, public Hugging Face pull requests, private dataset upload, and release export |
 | Safety | kill switch (`dem kill`), emergency wipe (`dem purge`), no telemetry, egress only during explicit publish |
 
 ### Not in v0.3 (deliberate)
@@ -123,13 +165,13 @@ Imported messages enter the encrypted review queue. A pair becomes eligible for 
 
 No silent capture · no silent auto-upload · no capturing others' devices/conversations · no bypassing DLP/MDM/provider access controls · no publishing third-party personal/confidential data, live secrets, PHI, or minors' data · no re-identification · no sale/ad targeting/telemetry · no claiming licenses we don't hold · no implying provider endorsement · no one-click "publish everything."
 
-Two consent switches are kept separate: **capture locally** ≠ **publish publicly**. An ephemeral session can override global toggles. Publication is irreversible; the UI says so, and retraction cannot guarantee erasure from caches/mirrors.
+Local capture and public uploads each require user authorization. You can authorize an AI to review and send a selected batch. Public copies can remain in caches and mirrors after removal.
 
 ---
 
 ## ChatGPT / Claude / Gemini sources
 
-You pay for these outputs, so they're yours to keep and contribute. Enable them with `dem attest`. Those records carry `derived_from: proprietary-api-output`, are tagged `user_owned_paid_output`, and are grouped in the `restricted` partition so the dataset stays clear about where each record came from. Nothing about them is hidden or second-class — the tag is just provenance.
+Enable commercial-source imports with `dem attest`. These rows carry `derived_from: proprietary-api-output`. Community contributions retain that label and require permission to share the selected content publicly under the dataset's terms.
 
 ---
 
@@ -156,7 +198,8 @@ The default license is **Apache-2.0**, as requested. Apache-2.0 is a *software* 
 | `dem review` | localhost review UI |
 | `dem run -- <command>` | wrap a tool through capture proxies |
 | `dem release [--version X]` | build deduped, quality-gated release |
-| `dem publish --dry-run [X]` / `dem publish --version X` | preview / publish |
+| `dem publish [--dry-run \| --export] [--version X] [--repo owner/name] [--public]` | upload, preview, or export a Hugging Face dataset |
+| `dem contribute --list` or `dem contribute --chat CHAT_ID` | find imported chats or preview a public contribution |
 | `dem status` | status + vault stats |
 | `dem kill` | trigger daemon kill switch |
 | `dem purge` | emergency local wipe (requires typing PURGE) |
@@ -198,9 +241,3 @@ PYTHONPATH=. python3 -m unittest discover -s tests -v
 ```
 
 The tests cover redaction/quarantine, dedup, quality gates, encryption-at-rest, clean-vs-restricted partitioning, and an end-to-end release build.
-
----
-
-## The honest part
-
-You paid for the outputs you contribute, so they're yours to share. DEM doesn't treat them as second-class data — the `restricted` tag simply records where each record came from, so anyone using the dataset knows which kind of model produced it. The operating rules are straightforward: local-first, consent-based, review-before-publish, and clear provenance on every record. That is what makes it possible for people to actually trust and want to use it.

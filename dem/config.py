@@ -19,7 +19,7 @@ DEFAULTS: dict = {
         "clipboard": False,
         "commercial_surfaces_default": "exclude",  # exclude | attest
         "capture_prompts": False,
-        "capture_code": False,
+        "capture_code": True,
     },
     "privacy": {
         "consent_mode": "default-deny",
@@ -33,7 +33,8 @@ DEFAULTS: dict = {
         "license": "Apache-2.0",
         "cadence": "manual",
         "dry_run_required": True,
-        "repo": "dem/distill-every-model",
+        "repo": "",
+        "community_repo": "",
     },
     "review": {"port": 8787, "token": ""},
 }

@@ -3,19 +3,24 @@ from __future__ import annotations
 
 from ..consent import CONSENT_VERSION, is_commercial
 from ..config import Config
-from ..models import DatasetRecord, sha256_text, ulid
+from ..models import ACTIVITY_PAYLOAD_FIELDS, ACTIVITY_RESULT_FIELDS, CaptureEvent, DatasetRecord, sha256_text, ulid
+from ..privacy import redact, summarize_redactions
 from ..vault import Vault
+from .evidence import collect_task_evidence
 
 
-def build_records(vault: Vault, config: Config) -> list[DatasetRecord]:
-    approved = vault.approved_captures()
-    prompts = {c.conversation_id: c for c in approved if c.role == "prompt"}
+def build_records(vault: Vault, config: Config, *, conversation_id: str | None = None) -> list[DatasetRecord]:
+    return records_from_captures(vault.approved_captures(conversation_id), vault, config)
 
-    history_prompts = {c.metadata["history_turn"]: c for c in approved
+
+def records_from_captures(captures: list[CaptureEvent], vault: Vault, config: Config) -> list[DatasetRecord]:
+    prompts = {c.conversation_id: c for c in captures if c.role == "prompt"}
+
+    history_prompts = {c.metadata["history_turn"]: c for c in captures
                       if c.role == "prompt" and "history_turn" in c.metadata}
 
     records: list[DatasetRecord] = []
-    for event in approved:
+    for event in captures:
         if event.role != "response":
             continue
         prompt_text = (event.metadata or {}).get("prompt_text") or ""
@@ -36,13 +41,29 @@ def build_records(vault: Vault, config: Config) -> list[DatasetRecord]:
             {"role": "assistant", "content": response_text},
         ]
         canonical = prompt_text + "\n" + response_text
+        model = redact(event.model_hint, config)
+        activity = []
+        for step in event.activity:
+            reviewed = {"type": step["type"], "text": step["text"]}
+            for field in ACTIVITY_PAYLOAD_FIELDS:
+                if field in step and f"{field}_hold" not in step:
+                    reviewed[field] = step[field]
+            reviewed.update((field, step[field]) for field in (*ACTIVITY_RESULT_FIELDS, "model") if field in step)
+            activity.append(reviewed)
+        redaction_summary = [
+            {"field": field, "category": category, "count": count}
+            for field, text in (("prompt", prompt_text), ("response", response_text),
+                                ("activity", "\n".join(value for step in activity for key, value in step.items()
+                                                      if key != "type")))
+            for category, count in summarize_redactions(text).items()
+        ]
         records.append(DatasetRecord(
             id=ulid(),
             prompt=prompt_text,
             response=response_text,
             messages=messages,
             metadata={
-                "model": event.model_hint,
+                "model": model.text if model.scrubbed else "",
                 "source": event.source,
                 "surface": event.surface,
                 "conversation_id": event.conversation_id,
@@ -61,5 +82,9 @@ def build_records(vault: Vault, config: Config) -> list[DatasetRecord]:
             consent_token=vault.keys.tag(event.id + CONSENT_VERSION),
             pii_scrubbed=True,
             raw_hash=sha256_text(canonical),
+            activity=activity,
+            redaction_summary=redaction_summary,
+            task_outcome={"status": event.task_outcome, "source": "contributor"} if event.task_outcome else None,
+            evidence=collect_task_evidence(activity),
         ))
     return records

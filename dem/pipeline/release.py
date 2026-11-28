@@ -11,9 +11,15 @@ from ..config import Config
 from .dedup import Deduplicator
 from .quality import GATE, PIPELINE_VERSION, score_all
 
+SPLITS = ("train", "validation", "test")
+RELEASE_VERSION = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+")
+SHARD_NAME = "train-00000-of-00001.jsonl"
+
 
 def _bump(version: str | None, releases_dir: Path) -> str:
     if version:
+        if not RELEASE_VERSION.fullmatch(version):
+            raise ValueError("Use a release version like 0.3.0.")
         return version
     version_file = releases_dir / "VERSION"
     if version_file.exists():
@@ -96,6 +102,12 @@ Counts: {json.dumps(counts)}.
 """
 
 
+def curate_records(records: list, config: Config):
+    dedup_result = Deduplicator().run(records)
+    accepted, rejected = score_all(dedup_result.unique, config)
+    return accepted, rejected, dedup_result
+
+
 def build_release(records: list, releases_dir: Path, config: Config,
                   version: str | None = None, vault=None) -> dict:
     releases_dir.mkdir(parents=True, exist_ok=True)
@@ -103,9 +115,7 @@ def build_release(records: list, releases_dir: Path, config: Config,
     release_dir = releases_dir / f"v{version}"
     release_dir.mkdir(parents=True, exist_ok=True)
 
-    dedup = Deduplicator()
-    dedup_result = dedup.run(records)
-    accepted, rejected = score_all(dedup_result.unique, config)
+    accepted, rejected, dedup_result = curate_records(records, config)
     if vault is not None:
         for record in accepted:
             vault.add_record(record)
@@ -124,11 +134,11 @@ def build_release(records: list, releases_dir: Path, config: Config,
     file_hashes: dict[str, str] = {}
     for tier in ("clean", "restricted"):
         tier_records = [r for r in accepted if r.source_tier == tier]
-        for split in ("train", "validation", "test"):
+        for split in SPLITS:
             split_records = [r for r in tier_records if _split_bucket(r) == split]
             out_dir = data_root / tier / split
             out_dir.mkdir(parents=True, exist_ok=True)
-            path = out_dir / "train-00000-of-00001.jsonl"
+            path = out_dir / SHARD_NAME
             with open(path, "w", encoding="utf-8") as fh:
                 for record in split_records:
                     fh.write(json.dumps(record.to_dict(), ensure_ascii=False) + "\n")

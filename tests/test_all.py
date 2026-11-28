@@ -10,7 +10,7 @@ from pathlib import Path
 from dem.adapters.base import CaptureSink
 from dem.config import Config
 from dem.crypto import Keyring
-from dem.models import sha256_text, ulid
+from dem.models import CaptureEvent, sha256_text, ulid
 from dem.pipeline.dedup import Deduplicator
 from dem.pipeline.formatter import build_records
 from dem.pipeline.quality import score, score_all
@@ -60,9 +60,29 @@ class TestPrivacy(TempEnv):
         result = redact("patient diagnosis: NDA confidential record", self.config)
         self.assertIsNotNone(result.quarantine_reason)
 
-    def test_code_block_removed_by_default(self):
+    def test_code_blocks_are_kept_and_scanned(self):
         result = redact("answer\n```python\nprint('hi')\n```\ndone", self.config)
-        self.assertIn("[CODE_BLOCK_REMOVED]", result.text)
+        self.assertIn("```python\nprint('hi')\n```", result.text)
+        unsafe = redact("```sh\nexport API_KEY=sk-abcdefghijklmnopqrstuvwxyz0123\n```", self.config)
+        self.assertIn("```sh", unsafe.text)
+        self.assertNotIn("sk-abcdef", unsafe.text)
+        self.assertIsNotNone(unsafe.quarantine_reason)
+        self.config.set("capture", "capture_code", False)
+        self.assertEqual(redact("```python\nprint('hi')\n```", self.config).text, "[CODE_BLOCK_REMOVED]")
+
+    def test_restore_code_reopens_review_and_preserves_manual_edits(self):
+        code = "Here is the example:\n```python\nprint('hi')\n```"
+        legacy = redact(code, self.config, keep_code=False).text
+        for capture_id in ("plain", "edited"):
+            self.vault.add_capture(CaptureEvent(id=capture_id, source="manual", surface="manual", role="response",
+                                                text=code, redacted_text=legacy, conversation_id="chat", turn_index=0,
+                                                consent="approved"))
+        self.vault.edit_capture("edited", "My edited answer: " + legacy)
+        self.assertEqual(self.vault.restore_code_blocks(self.config), {"restored": 1, "quarantined": 0, "skipped": 1})
+        restored = self.vault.get_capture("plain")
+        self.assertEqual((restored.redacted_text, restored.consent), (code, "pending"))
+        edited = self.vault.get_capture("edited")
+        self.assertEqual((edited.redacted_text, edited.consent), ("My edited answer: " + legacy, "redacted"))
 
 
 class TestDedup(unittest.TestCase):

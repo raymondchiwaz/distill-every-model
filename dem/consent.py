@@ -13,16 +13,15 @@ CONSENT_TEXT = """DEM will read the text answers shown by the LLM apps you selec
 on THIS device only.
 
 - By default NOTHING is uploaded. Text sits in an encrypted local queue.
-- Before anything is published you will see the exact final text, character for
-  character, and must approve it.
+- Publishing requires your authorization. You can review the exact upload,
+  or ask your AI to check and submit the specific chats you choose.
 - We automatically try to remove names, emails, keys and other sensitive data.
   Our redaction will sometimes fail. YOU are the last line of defense.
-- Captured prompts and code blocks are OFF by default.
-- Once published to HuggingFace, text is PUBLIC and PERMANENT. It can be copied,
-  cached and trained into models. We cannot reliably take it back.
-- Outputs from ChatGPT/Claude/Gemini that you pay for are yours to keep and
-  share. They carry a `proprietary-api-output` provenance tag and are grouped
-  in a 'restricted' partition so the dataset stays clear about their origin.
+- Prompt capture is off by default. Code in captured text goes through the same review.
+- Public uploads to Hugging Face can be copied, cached and trained into models.
+  Community submissions become public as soon as the pull request opens.
+- Commercial outputs carry a `proprietary-api-output` provenance tag. Only upload
+  prompts and outputs you have permission to share with the destination.
 - You can stop capture, delete your local queue, and request removal of
   published items at any time (public copies may persist).
 """

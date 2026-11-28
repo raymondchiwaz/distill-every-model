@@ -6,8 +6,10 @@ must be measured on a held-out set before 1.0.
 """
 from __future__ import annotations
 
+import json
 import math
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 
 from .config import Config
@@ -18,7 +20,9 @@ DETECTORS: list[tuple[str, re.Pattern]] = [
     ("SECRET", re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b")),  # JWT
     ("SECRET", re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----")),
     ("SECRET", re.compile(r"(?:postgres|mysql|mongodb(?:\+srv)?|redis|amqp)://[^\s:@]+:[^\s@]+@[^\s]+")),
-    ("SECRET", re.compile(r"(?i)\b(?:api[_-]?key|token|password|passwd|secret)\s*[:=]\s*['\"]?[A-Za-z0-9_\-]{8,}['\"]?")),
+    ("SECRET", re.compile(r"(?i)\b(?:api[_-]?key|token|password|passwd|secret)['\"]?\s*[:=]\s*['\"]?[A-Za-z0-9_\-]{8,}['\"]?")),
+    ("SECRET", re.compile(r"(?i)\b(?:proxy[-_])?authorization['\"]?\s*[:=]\s*['\"]?"
+                          r"(?:bearer|basic)\s+[A-Za-z0-9._~+/=-]{3,}")),
     ("EMAIL", re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")),
     ("PHONE", re.compile(r"(?<!\d)(?:\+?\d{1,3}[ .-]?)?(?:\(\d{2,4}\)[ .-]?)?\d{3,4}[ .-]?\d{3,4}(?!\d)")),
     ("IP", re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")),
@@ -33,6 +37,18 @@ HIGH_RISK_MARKERS = re.compile(
 )
 
 CODE_FENCE = re.compile(r"```[^\n]*\n[\s\S]*?```")
+CODE_BLOCK_REMOVED = "[CODE_BLOCK_REMOVED]"
+TOOL_CREDENTIAL_KEY = re.compile(
+    r"(?:authorization|proxy[_-]?authorization|cookies?|set[_-]?cookie|(?:api|private)[_-]?key|"
+    r"(?:(?:access|refresh|auth)[_-]?)?token|password|passwd|secret|credentials?)", re.IGNORECASE,
+)
+REDACTION_MARKERS = re.compile(r"\[(CODE_BLOCK_REMOVED|(?:" + "|".join(sorted({kind for kind, _ in DETECTORS}))
+                               + r")_\d+)\]")
+
+
+def summarize_redactions(text: str) -> dict[str, int]:
+    return dict(Counter(marker if marker == "CODE_BLOCK_REMOVED" else marker.rsplit("_", 1)[0]
+                        for marker in REDACTION_MARKERS.findall(text)))
 
 
 @dataclass
@@ -44,6 +60,47 @@ class RedactionResult:
     @property
     def scrubbed(self) -> bool:
         return self.quarantine_reason is None
+
+
+def redact_tool_payload(value, config: Config, *, keep_code: bool | None = None) -> RedactionResult:
+    masked = False
+
+    def scrub_json(item):
+        nonlocal masked
+        if isinstance(item, dict):
+            result = {}
+            for key, child in item.items():
+                if TOOL_CREDENTIAL_KEY.fullmatch(key) and child:
+                    result[key] = "[SECRET_1]"
+                    masked = True
+                else:
+                    result[key] = scrub_json(child)
+            return result
+        if isinstance(item, list):
+            return [scrub_json(child) for child in item]
+        return item
+
+    if isinstance(value, str):
+        try:
+            decoded = json.loads(value)
+        except ValueError:
+            decoded = None
+        if isinstance(decoded, (dict, list)):
+            value = decoded
+    if isinstance(value, list) and value and all(
+        isinstance(item, dict) and item.keys() == {"type", "text"}
+        and item["type"] in ("input_text", "output_text", "text") and isinstance(item["text"], str)
+        for item in value
+    ):
+        value = "\n".join(item["text"] for item in value)
+    if not isinstance(value, str):
+        value = json.dumps(scrub_json(value), indent=2, ensure_ascii=False)
+    if not value.strip():
+        return RedactionResult("")
+    result = redact(value, config, keep_code=keep_code)
+    if masked and config.enabled("privacy", "fail_closed"):
+        result.quarantine_reason = "contained credential/financial identifier"
+    return result
 
 
 def luhn(number: str) -> bool:
@@ -91,7 +148,7 @@ def _replace_spans(text: str, spans: list[tuple[int, int, str]], counters: dict[
     return "".join(out), log
 
 
-def redact(text: str, config: Config) -> RedactionResult:
+def redact(text: str, config: Config, *, keep_code: bool | None = None) -> RedactionResult:
     """Scrub secrets/PII and quarantine high-risk content. Fail closed."""
     if not text or not text.strip():
         return RedactionResult(text="", quarantine_reason="empty")
@@ -100,9 +157,10 @@ def redact(text: str, config: Config) -> RedactionResult:
     redactions: list[dict] = []
     counters: dict[str, int] = {}
 
-    # Code handling: strip code blocks by default; if enabled, scrub inside them.
-    if not config.enabled("capture", "capture_code"):
-        working = CODE_FENCE.sub("[CODE_BLOCK_REMOVED]", working)
+    if keep_code is None:
+        keep_code = config.enabled("capture", "capture_code")
+    if not keep_code:
+        working = CODE_FENCE.sub(CODE_BLOCK_REMOVED, working)
 
     if config.enabled("privacy", "secret_scan"):
         spans: list[tuple[int, int, str]] = []

@@ -1,4 +1,4 @@
-"""Read local harness formats and yield only user prompts and assistant text."""
+"""Read user-facing turns and structured activity from local harness formats."""
 from __future__ import annotations
 
 import contextlib
@@ -6,7 +6,7 @@ import json
 import re
 import sqlite3
 import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from itertools import groupby
 from pathlib import PurePosixPath
 
@@ -16,6 +16,8 @@ class Message:
     role: str
     text: str
     model: str = ""
+    activity: list[tuple[str, str]] = field(default_factory=list)
+    tool_details: dict[int, dict] = field(default_factory=dict)
 
 
 def _obj(value):
@@ -49,23 +51,49 @@ def _chat(row, role=None, text=None):
     role = role or row.get("role")
     if role not in ("user", "assistant", "model", "gemini"):
         return None
-    if row.get("phase") == "commentary" or row.get("isMeta") or row.get("isSidechain"):
+    if row.get("isMeta") or row.get("isSidechain"):
         return None
-    if (row.get("tool_calls") or row.get("toolCalls")
+    content = row.get("content") if text is None else text
+    model = _string(row.get("model"))
+    activity = _structured_activity(row, content) if role != "user" else []
+    if row.get("phase") == "commentary":
+        progress = _text(content) if role != "user" else ""
+        if progress:
+            activity.append(("progress", progress))
+        return Message("activity", "", model, activity)
+    if (row.get("tool_calls") or row.get("toolCalls") or row.get("toolRequests")
             or row.get("stop_reason") in ("tool_use", "tool_calls")
             or row.get("stopReason") in ("toolUse", "aborted", "error")
             or row.get("finishReason") in ("tool-calls", "error", "abort")
             or row.get("finish") in ("tool-calls", "tool_calls", "error", "abort")):
-        return None
-    content = row.get("content") if text is None else text
+        return Message("activity", "", model, activity)
     if any(any(key in _obj(part) for key in ("functionCall", "functionResponse"))
            or _obj(part).get("type") in ("tool_use", "tool_result", "tool-call", "tool-result")
            for part in _items(content)):
-        return None
+        return Message("activity", "", model, activity)
     result = _text(content)
     if result.startswith(("<system-reminder>", "<environment_context>", "<local-command-")):
         return None
-    return Message("prompt" if role == "user" else "response", result, _string(row.get("model")))
+    return Message("prompt" if role == "user" else "response", result, model, activity)
+
+
+def _structured_activity(row, content):
+    summary = _string(row.get("reasoning_summary") or row.get("reasoningSummary"))
+    activity = [("rationale", summary)] if summary else []
+    calls = _items(row.get("tool_calls") or row.get("toolCalls") or row.get("toolRequests"))
+    if not calls:
+        for part in map(_obj, _items(content)):
+            if part.get("type") in ("tool_use", "tool-call", "toolCall", "tool") or "functionCall" in part:
+                call = _obj(part.get("functionCall")) or part
+                name = call.get("name") or call.get("toolName") or call.get("tool")
+                if isinstance(name, str):
+                    activity.append(("tool_call", name))
+        return activity
+    for call in map(_obj, calls):
+        name = _obj(call.get("function")).get("name") or call.get("name") or call.get("toolName")
+        if isinstance(name, str):
+            activity.append(("tool_call", name))
+    return activity
 
 
 def _extension(row):
@@ -81,10 +109,19 @@ def _extension(row):
 
 
 def _message(reader, row):
+    if reader == "opencode":
+        message = _chat({**row, "model": _opencode_model(row)})
+        if message and message.role != "prompt":
+            tool_steps = [(index, name) for index, (kind, name) in enumerate(message.activity) if kind == "tool_call"]
+            parts = [part for part in map(_obj, _items(row.get("content")))
+                     if part.get("type") == "tool" and _opencode_tool_name(part)]
+            if [name for _, name in tool_steps] == [_opencode_tool_name(part) for part in parts]:
+                message.tool_details = {index: _opencode_tool_details(part) for (index, _), part in zip(tool_steps, parts)}
+        return message
     if reader == "copilot":
         data = _obj(row.get("data"))
         role = {"user.message": "user", "assistant.message": "assistant"}.get(row.get("type"))
-        if data.get("agentId") or data.get("toolRequests") or data.get("parentToolCallId"):
+        if data.get("agentId") or data.get("parentToolCallId"):
             return None
         return _chat(data, role, data.get("content"))
     if reader in ("cursor", "droid", "pi", "continue", "qwen"):
@@ -145,20 +182,44 @@ def _session_id(reader, file):
 
 def _pairs(rows, reader, session):
     prompt = answer = None
+    activity = []
+    tool_details = {}
     for position, row in rows:
         if row is None:
             prompt = answer = None
+            activity = []
+            tool_details = {}
             continue
-        msg = _message(reader, row)
+        msg = row if isinstance(row, Message) else _message(reader, row)
         if msg is None:
             continue
         if msg.role == "prompt":
             if prompt and answer:
+                answer.activity = activity
+                answer.tool_details = tool_details
                 yield session, start, prompt, answer
             prompt, answer, start = msg.text, None, position
-        elif prompt and msg.text:
-            answer = msg
+            activity = []
+            tool_details = {}
+        elif prompt:
+            if msg.role == "activity" and any(kind == "tool_call" for kind, _ in msg.activity):
+                if answer:
+                    if answer.model:
+                        tool_details[len(activity)] = {"model": answer.model}
+                    activity.append(("progress", answer.text))
+                answer = None
+            for index, _ in enumerate(msg.activity):
+                detail = dict(msg.tool_details.get(index, {}))
+                if msg.model:
+                    detail.setdefault("model", msg.model)
+                if detail:
+                    tool_details[len(activity) + index] = detail
+            activity.extend(msg.activity)
+            if msg.role == "response" and msg.text:
+                answer = msg
     if prompt and answer:
+        answer.activity = activity
+        answer.tool_details = tool_details
         yield session, start, prompt, answer
 
 
@@ -274,16 +335,38 @@ def _markdown(stream, reader, session):
         yield session, start, {"role": role, "content": "\n".join(body)}
 
 
+def _opencode_model(message):
+    model = message.get("model")
+    return _string(message.get("modelID") or _obj(model).get("id") or model)
+
+
+def _opencode_tool_name(part):
+    return _string(part.get("name") or part.get("tool"))
+
+
+def _opencode_tool_details(part):
+    state = _obj(part.get("state"))
+    details = {}
+    if state.get("input") is not None:
+        details["input"] = state["input"]
+    if state.get("status") in ("completed", "error"):
+        details["is_error"] = "true" if state["status"] == "error" else "false"
+    for key in ("content", "output", "error"):
+        if state.get(key) is not None:
+            details["output"] = state[key]
+            break
+    return details
+
+
 def _opencode_messages(conn):
     latest = conn.execute("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='session_v2'").fetchone()
     if latest:
         rows = conn.execute(
-            "SELECT m.session_id, m.id, m.data, "
-            """CASE p.type WHEN 'tool' THEN '{"type":"tool"}' ELSE p.data END, m.type """
+            "SELECT m.session_id, m.id, m.data, p.data, m.type "
             "FROM session_message m JOIN session_v2 s ON s.id=m.session_id "
             "LEFT JOIN session_part p ON p.session_id=m.session_id AND p.message_id=m.id "
             "AND p.type IN ('text', 'tool') "
-            "WHERE s.parent_id IS NULL AND m.type IN ('user','assistant') "
+            "WHERE s.parent_id IS NULL AND m.type IN ('user','assistant','model-switched') "
             "ORDER BY m.session_id, m.seq, p.ordinal"
         )
     else:
@@ -293,18 +376,59 @@ def _opencode_messages(conn):
             "LEFT JOIN part p ON p.message_id=m.id "
             "WHERE s.parent_id IS NULL ORDER BY m.session_id, m.time_created, m.id, p.id"
         )
+    previous_session = None
+    activity = []
+    tool_details = {}
     for (session, _), block_rows in groupby(rows, key=lambda row: (row[0], row[1])):
+        if session != previous_session:
+            activity = []
+            tool_details = {}
+            previous_session = session
         blocks = list(block_rows)
         message = _obj(json.loads(blocks[0][2]))
         if message.get("summary") is True:
             continue
         role = blocks[0][4] or message.get("role")
-        parts = [_obj(json.loads(row[3])) for row in blocks if row[3]]
-        if role == "assistant" and any(part.get("type") == "tool" for part in parts):
+        model = _opencode_model(message)
+        if role == "model-switched":
+            if model:
+                tool_details[len(activity)] = {"model": model}
+                activity.append(("model_change", model))
             continue
-        model = message.get("modelID") or _obj(message.get("model")).get("id")
+        parts = [_obj(json.loads(row[3])) for row in blocks if row[3]]
+        if role == "user":
+            activity = [step for step in activity if step[0] == "model_change"]
+            tool_details = {index: {"model": model} for index, (_, model) in enumerate(activity)}
+        if role == "assistant" and any(part.get("type") == "tool" for part in parts):
+            # Keep the reader's existing row positions so saved turns can gain
+            # activity without being imported a second time.
+            for part in parts:
+                if part.get("type") == "tool":
+                    name = _opencode_tool_name(part)
+                    if name:
+                        detail = _opencode_tool_details(part)
+                        if model:
+                            detail["model"] = model
+                        tool_details[len(activity)] = detail
+                        activity.append(("tool_call", name))
+                elif part.get("type") == "text" and not part.get("synthetic"):
+                    progress = _string(part.get("text"))
+                    if progress:
+                        if model:
+                            tool_details[len(activity)] = {"model": model}
+                        activity.append(("progress", progress))
+            continue
         content = message.get("text") if latest and role == "user" else parts or message.get("content")
-        yield session, {**message, "role": role, "model": model, "content": content}
+        message_row = {**message, "role": role, "model": model, "content": content}
+        parsed = _message("opencode", message_row)
+        if parsed and parsed.role != "prompt":
+            offset = len(activity)
+            tool_details.update((offset + index, detail) for index, detail in parsed.tool_details.items())
+            parsed.activity[:0] = activity
+            parsed.tool_details = tool_details
+            activity = []
+            tool_details = {}
+        yield session, parsed or message_row
 
 
 def _db_turns(file, reader):

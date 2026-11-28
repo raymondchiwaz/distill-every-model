@@ -5,6 +5,7 @@ import math
 import re
 
 from ..config import Config
+from ..models import ACTIVITY_PAYLOAD_FIELDS
 from ..privacy import redact
 
 TOXIC = re.compile(r"(?i)\b(?:fuck|shit|idiot|stupid|kill yourself|hate (?:you|them)|racist|slur)\b")
@@ -81,7 +82,9 @@ def passes(record, config: Config) -> tuple[bool, str]:
     if _repetition_ratio(record.response) > 0.4:
         return False, "repetitive/degenerate output"
     # Defense in depth: re-scan the finished record.
-    for text in (record.prompt, record.response):
+    activity_text = (step[field] for step in record.activity for field in ("text", *ACTIVITY_PAYLOAD_FIELDS)
+                     if field in step and step[field])
+    for text in (record.prompt, record.response, *activity_text):
         result = redact(text, config)
         if result.quarantine_reason:
             return False, f"pII rescan: {result.quarantine_reason}"

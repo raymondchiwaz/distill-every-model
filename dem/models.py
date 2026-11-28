@@ -10,6 +10,9 @@ from typing import Any
 
 CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 SCHEMA_VERSION = "1.0.0"
+ACTIVITY_PAYLOAD_FIELDS = ("input", "output")
+ACTIVITY_RESULT_FIELDS = ("exit_code", "is_error")
+TASK_OUTCOMES = {"solved": "Solved", "partial": "Partly solved", "unsolved": "Unsolved"}
 
 
 def ulid() -> str:
@@ -50,6 +53,8 @@ class CaptureEvent:
     redactions: list[dict] = field(default_factory=list)
     quarantine_reason: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    activity: list[dict[str, str]] = field(default_factory=list)
+    task_outcome: str | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -77,6 +82,10 @@ class DatasetRecord:
     pii_scrubbed: bool = True
     schema_version: str = SCHEMA_VERSION
     raw_hash: str = ""
+    activity: list[dict[str, str]] = field(default_factory=list)
+    redaction_summary: list[dict[str, str | int]] = field(default_factory=list)
+    task_outcome: dict[str, str] | None = None
+    evidence: dict[str, Any] | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
