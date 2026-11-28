@@ -6,6 +6,8 @@ import os
 import tomllib
 from pathlib import Path
 
+DEFAULT_COMMUNITY_REPO = "Distilleverymodel/community-chats"
+
 DEFAULTS: dict = {
     "general": {"data_dir": "", "node_id": ""},
     "capture": {
@@ -34,7 +36,7 @@ DEFAULTS: dict = {
         "cadence": "manual",
         "dry_run_required": True,
         "repo": "",
-        "community_repo": "",
+        "community_repo": DEFAULT_COMMUNITY_REPO,
     },
     "review": {"port": 8787, "token": ""},
 }
@@ -57,6 +59,8 @@ class Config:
             for section, values in loaded.items():
                 if section in self._data and isinstance(values, dict):
                     self._data[section].update(values)
+        if not str(self.get("publish", "community_repo") or "").strip():
+            self.set("publish", "community_repo", DEFAULT_COMMUNITY_REPO)
 
     @property
     def data_dir(self) -> Path:

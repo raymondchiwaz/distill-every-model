@@ -3,12 +3,12 @@
 set -eu
 
 install_dem() {
-    version=0.3.1
+    version=0.3.2
     runtime="${XDG_DATA_HOME:-$HOME/.local/share}/distill-every-model/cli-$version"
     bin_dir="${DEM_BIN_DIR:-$HOME/.local/bin}"
     python="${DEM_PYTHON:-python3}"
     package="https://github.com/raymondchiwaz/distill-every-model/releases/download/v$version/distilleverymodel-distill-every-model-$version.tgz"
-    digest="ce476e9550990be028cf003f9c5633202649bd995987f3413b207db4cf4b23ac4be727f16f4f1f895c00861a19e13307c6fec172809aabdbd4f80317a4ed3c7b"
+    digest="47ebaf2b22e2fb75246e884119e3c18ab83ac45a93da1bc86f8fe6cb3c29abe48a1e72f1d5528b9c9203842786bf99227602a716e11e9353931ca9a2de117edb"
 
     "$python" -c 'import venv, ensurepip, sys; sys.exit(sys.version_info < (3, 11))' || {
         echo "Install Python 3.11 or newer with venv and pip support, then rerun the installer." >&2

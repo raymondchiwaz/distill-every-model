@@ -424,16 +424,14 @@ def make_handler(config: Config, vault: Vault, token: str):
 
         def _community_form(self, current_config, records, scope, notice):
             contribution = prepare_contribution(records, current_config)
-            configured = str(current_config.get("publish", "community_repo") or "").strip()
+            configured = str(current_config.get("publish", "community_repo")).strip()
             status = f'<p class="notice" role="status">{escape(notice)}</p>' if notice else ""
             header = f'<h2>Contribute to the community</h2>{status}'
             if not contribution.count:
                 return (f'<article class="message hub-card">{header}'
                         '<p>No approved pairs passed the community upload checks.</p></article>')
 
-            destination = (f'<p>Hugging Face dataset <strong>{escape(configured)}</strong></p>' if configured else
-                           '<label>Community dataset<input name="repo" placeholder="owner/dataset" '
-                           'maxlength="193" required></label>')
+            destination = f'<p>Hugging Face dataset <strong>{escape(configured)}</strong></p>'
             review = escape(contribution.payload.decode("utf-8"))
             skipped = f'<p>Pairs left out by the upload checks {contribution.skipped}</p>' if contribution.skipped else ""
             token_field = "" if get_token() and not notice else f"""
@@ -456,7 +454,7 @@ def make_handler(config: Config, vault: Vault, token: str):
             if not self._hub_scope():
                 return self._send("Select approved chats to contribute.", 400)
             current_config = Config(path=config.path)
-            configured = str(current_config.get("publish", "community_repo") or "").strip()
+            configured = str(current_config.get("publish", "community_repo")).strip()
             with lock:
                 records = self._hub_records(current_config)
                 contribution = prepare_contribution(records, current_config)
@@ -464,7 +462,7 @@ def make_handler(config: Config, vault: Vault, token: str):
                 if not secrets.compare_digest(snapshot.encode(), contribution.review_token(configured).encode()):
                     return self._hub(community_notice="The selected chats or dataset changed. Review the updated upload.")
             try:
-                repo = community_repo(current_config, configured or form.get("repo", [""])[0])
+                repo = community_repo(current_config)
                 result = submit_contribution(contribution, repo, token=form.get("hf_token", [""])[0])
             except (PublishError, OSError) as exc:
                 with lock:

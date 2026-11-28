@@ -8,7 +8,8 @@ from unittest.mock import patch
 from huggingface_hub import DatasetCard
 from huggingface_hub.hf_api import RepoUrl
 
-from dem.community import prepare_contribution, submit_contribution
+from dem.community import community_repo, prepare_contribution, submit_contribution
+from dem.config import Config
 from dem.models import CaptureEvent, DatasetRecord
 from dem.pipeline.formatter import build_records
 from dem.pipeline.release import SHARD_NAME, build_release
@@ -29,6 +30,20 @@ def record(tier, conversation, prompt, response):
 
 
 class TestHuggingFace(TempEnv):
+    def test_community_destination_defaults_for_existing_vaults_and_can_be_overridden(self):
+        default_repo = "Distilleverymodel/community-chats"
+        self.assertEqual(community_repo(Config(path=self.config.path)), default_repo)
+
+        self.config.set("publish", "community_repo", "")
+        self.config.save()
+        self.assertEqual(community_repo(Config(path=self.config.path)), default_repo)
+
+        self.config.set("publish", "community_repo", "other-org/community")
+        self.config.save()
+        configured = Config(path=self.config.path)
+        self.assertEqual(community_repo(configured), "other-org/community")
+        self.assertEqual(community_repo(configured, "explicit/dataset"), "explicit/dataset")
+
     def test_chat_batch_excludes_unselected_unapproved_and_disabled_pairs(self):
         for chat_id, answer_consent in (("selected", "approved"), ("unselected", "approved"),
                                        ("pending", "pending"), ("disabled", "approved")):

@@ -18,14 +18,14 @@ Capture → encrypted local vault → redaction → review → Hugging Face
 On macOS or Linux with Python 3.11+ and venv support, install the released CLI for your user account.
 
 ```sh
-curl -fsSL https://github.com/raymondchiwaz/distill-every-model/releases/download/v0.3.1/install.sh | sh
+curl -fsSL https://github.com/raymondchiwaz/distill-every-model/releases/latest/download/install.sh | sh
 ~/.local/bin/dem review --open
 ```
 
 Install with npm if you have Node.js, npm, and Python 3.11 or newer with `venv` and `pip` support.
 
 ```bash
-npm install -g https://github.com/raymondchiwaz/distill-every-model/releases/download/v0.3.1/distilleverymodel-distill-every-model-0.3.1.tgz
+npm install -g @distilleverymodel/distill-every-model
 dem review --open
 ```
 
@@ -66,12 +66,12 @@ Everything lives under `DEM_HOME` (default `~/.local/share/dem`). To use a throw
 ## Contribute to the Hugging Face community dataset
 
 1. In **Chat history**, select chats and click **Approve selected chats**. You can also approve an open chat from its detail page.
-2. Click **Export to Hugging Face** in Chat history. It previews approved pairs from your selection, or from all chats shown if nothing is selected.
+2. Click **Export to Hugging Face** in Chat history. It previews approved pairs from your selection, or from all chats shown if nothing is selected. The default public destination is the [DEM community dataset](https://huggingface.co/datasets/Distilleverymodel/community-chats).
 3. Click **Send to community**. DEM uses your Hugging Face CLI sign-in, or you can enter your own token with pull request access.
 
 Your contribution becomes public as soon as the pull request opens. The dataset maintainer merges accepted contributions. DEM sends each batch to `data/submissions/` as a separate JSONL file.
 
-For a community dataset, create a public dataset under your organization, enable discussions and pull requests in its settings, and share its `owner/dataset` name. In DEM you can enter the name on the upload screen or set it once with `dem config publish community_repo owner/dataset`. Configure the dataset card's training split to load `data/submissions/*.jsonl`.
+To use a different community dataset, set it with `dem config publish community_repo owner/dataset`. The dataset needs to be public with discussions and pull requests enabled. Configure its dataset card to load `data/submissions/*.jsonl` into the training split.
 
 ### Have your AI review and submit
 
