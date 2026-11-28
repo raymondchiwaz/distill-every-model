@@ -73,7 +73,7 @@ code { font-family: var(--mono); }
   padding: .65rem 1rem;
   background: var(--paper);
 }
-#mission, #setup, #contribute { scroll-margin-top: 1rem; }
+#mission, #setup, #contribute, #dataset { scroll-margin-top: 1rem; }
 
 .site-header { border-bottom: 1px solid var(--line); }
 .header-inner {
@@ -317,6 +317,49 @@ code { font-family: var(--mono); }
 .sample-message mark { background: #f3dfad; color: #4c3313; }
 .redacted-token { background: #dce1fd; color: #1e3283; padding: .09em .26em; font-size: .875em; }
 
+.dataset {
+  padding-block: clamp(3.5rem, 6.5vw, 6.5rem);
+  border-top: 1px solid var(--line);
+  background: #edf1f3;
+}
+.dataset-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  align-items: end;
+  gap: 1.2rem clamp(2rem, 6vw, 6rem);
+}
+.dataset-heading h2 { font-size: clamp(3rem, 6vw, 5.5rem); }
+.dataset-heading p { max-width: 27rem; padding-bottom: .25rem; color: var(--secondary); font-size: 1.125rem; }
+.dataset-viewer {
+  margin-top: clamp(1.5rem, 3.5vw, 2.75rem);
+  border-radius: .75rem;
+  overflow: hidden;
+  background: var(--ink);
+  box-shadow: 0 .8rem 2.6rem #16264521;
+}
+.dataset-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: .85rem 1.5rem;
+  padding: 1rem clamp(.85rem, 3vw, 1.5rem);
+  color: #fff;
+}
+.dataset-toolbar strong { display: block; font-size: 1.06rem; }
+.dataset-toolbar code { color: #d5e0f1; overflow-wrap: anywhere; font-size: .875rem; }
+.dataset-open { min-height: 2.8rem; background: var(--mint); color: var(--ink); }
+.dataset-open:hover { background: #dcf7e6; }
+.dataset-open:focus-visible { outline-color: #fff; }
+.dataset-frame {
+  height: clamp(29rem, 56svh, 42rem);
+  margin: 0 .5rem .5rem;
+  border-radius: .38rem;
+  overflow: hidden;
+  background: #fff;
+}
+.dataset-frame iframe { display: block; width: 100%; height: 100%; border: 0; }
+
 .help { background: var(--paper-deep); border-block: 1px solid var(--line); }
 .help-inner { padding-block: clamp(2.3rem, 4.5vw, 4rem); display: flex; justify-content: space-between; align-items: center; gap: 1.25rem 2.25rem; }
 .help h2 { font-size: clamp(2.75rem, 5.3vw, 4.6rem); }
@@ -424,6 +467,7 @@ code { font-family: var(--mono); }
   .main-nav a { display: inline-flex; align-items: center; min-height: 2.75rem; }
   .header-install { grid-column: 2; }
   .catalog-heading, .install-intro { align-items: start; flex-direction: column; }
+  .dataset-heading { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 42rem) {
   .hero { gap: 1.7rem; }
@@ -431,4 +475,5 @@ code { font-family: var(--mono); }
   .install-options { grid-template-columns: 1fr; }
   .harness-list li { flex-basis: calc(50% - 1px); gap: .55rem; padding: .58rem; font-size: .95rem; }
   .harness-list img { width: 1.55rem; height: 1.55rem; }
+  .dataset-frame { height: 30rem; margin-inline: .3rem; margin-bottom: .3rem; }
 }
